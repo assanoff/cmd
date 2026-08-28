@@ -1,0 +1,15 @@
+# Go workspace files: they change local builds silently and are ignored by
+# `go install pkg@latest` anyway.
+go.work
+go.work.sum
+
+# Binaries built in place.
+/ai-hear/ai-hear
+/ai-ask/ai-ask
+/ai-sum/ai-sum
+/ai-tr/ai-tr
+/ai-stack/ai-stack
+/radio/radio
+/chapters/chapters
+
+.DS_Store
