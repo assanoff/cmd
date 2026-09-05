@@ -86,6 +86,19 @@ func boundRoles() []role {
 	return out
 }
 
+// keptModels lists models gc must leave alone even though no role names them.
+// Roles are not the only way a model gets used: the Kronk server hands models
+// to anything that asks it, and those callers name a model directly rather
+// than going through a role. Nothing in the config would otherwise mention
+// such a model, so gc would read it as garbage.
+//
+// The value is a comma- or space-separated list of model ids.
+func keptModels() []string {
+	return strings.FieldsFunc(configValue("AI_MODELS_KEEP"), func(r rune) bool {
+		return r == ',' || r == ' ' || r == '\t'
+	})
+}
+
 // configValue reads one key. The process environment wins over the file, which
 // makes a one-off override just AI_MODEL_FAST=other/model ai-stack status.
 func configValue(key string) string {

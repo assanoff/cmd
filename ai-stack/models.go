@@ -20,13 +20,18 @@ func modelsCommand() *command {
 	fs := flag.NewFlagSet("models", flag.ContinueOnError)
 	fs.BoolVar(flagQuiet, "q", false, "suppress progress on standard error")
 	yes := fs.Bool("y", false, "for gc: delete without asking")
+	dry := fs.Bool("n", false, "for gc: list what would be removed, delete nothing")
 
 	return &command{
 		name:  "models",
-		usage: "models [sync|gc] [-y] [-q]",
+		usage: "models [-y] [-n] [-q] [sync|gc]",
 		short: "List installed models, download what the roles need, remove what they do not",
 		flags: fs,
 		run: func(ctx context.Context, args []string) error {
+			if f, ok := flagAfterArgs(args); ok {
+				return usagef("%s: flags go before the argument, as in \"ai-stack models -y gc\"", f)
+			}
+
 			switch {
 			case len(args) == 0:
 				return listModels()
@@ -38,7 +43,7 @@ func modelsCommand() *command {
 			case "sync":
 				return syncModels(ctx)
 			case "gc":
-				return gcModels(ctx, *yes)
+				return gcModels(ctx, *yes, *dry)
 			default:
 				return usagef("unknown models argument %q: want sync or gc", args[0])
 			}
@@ -58,7 +63,7 @@ func listModels() error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	defer w.Flush()
 
-	fmt.Fprintln(w, "BACKEND\tMODEL\tSIZE\tROLE")
+	fmt.Fprintln(w, "BACKEND\tMODEL\tSIZE\tCLAIMED BY")
 
 	llamaFiles, err := llama.Files()
 	if err != nil {
@@ -80,9 +85,10 @@ func listModels() error {
 	return nil
 }
 
-// claimedModels maps a model id to the roles pointing at it. A model can be
-// claimed by more than one role, which is why gc has to look at the whole set
-// rather than one role at a time.
+// claimedModels maps a model id to whatever holds it: the roles pointing at it,
+// or "keep" for a model named by AI_MODELS_KEEP. A model can be held by more
+// than one role, which is why gc has to look at the whole set rather than one
+// role at a time.
 func claimedModels() map[string]string {
 	claimed := map[string]string{}
 	for _, r := range boundRoles() {
@@ -93,13 +99,33 @@ func claimedModels() map[string]string {
 		}
 		claimed[name] = r.name
 	}
+	// The keep list comes second and never overwrites a role: "smart" says
+	// more about why a model is on disk than "keep" does.
+	for _, name := range keptModels() {
+		if claimed[name] == "" {
+			claimed[name] = "keep"
+		}
+	}
 	return claimed
 }
 
-// gcModels removes installed models no role points at. It asks first, because
-// a model is a multi-gigabyte download and the roles could simply be
+// gcModels removes installed models nothing claims. It asks first, because a
+// model is a multi-gigabyte download and the roles could simply be
 // misconfigured — deleting on that basis would be the wrong kind of helpful.
-func gcModels(ctx context.Context, yes bool) error {
+//
+// "Claimed" is a narrow word here: a bound role, or a name in AI_MODELS_KEEP.
+// A caller that talks to the Kronk server directly — an editor, a one-off
+// script — asks for a model by name and never touches a role, so its models
+// are invisible to this function. The keep list is how those are protected,
+// and it holds even under -y.
+func gcModels(ctx context.Context, yes, dry bool) error {
+	// Without a config file the roles are only their built-in defaults, and
+	// everything else on disk looks like garbage. That is a guess, not
+	// knowledge, and not one to delete gigabytes on.
+	if deployedConfig() == "" {
+		return fmt.Errorf("no config file found: gc has nothing to call claimed beyond the built-in defaults")
+	}
+
 	llama, whisper, err := openStores()
 	if err != nil {
 		return err
@@ -139,7 +165,7 @@ func gcModels(ctx context.Context, yes bool) error {
 	}
 
 	if len(victims) == 0 {
-		fmt.Println("nothing to remove: every installed model is claimed by a role")
+		fmt.Println("nothing to remove: every installed model is claimed")
 		return nil
 	}
 
@@ -147,6 +173,11 @@ func gcModels(ctx context.Context, yes bool) error {
 		fmt.Printf("  %-8s %-42s %s\n", v.backend, v.id, humanSize(v.size))
 	}
 	fmt.Printf("%d model(s), %s\n", len(victims), humanSize(total))
+
+	if dry {
+		fmt.Println("dry run: nothing removed")
+		return nil
+	}
 
 	if !yes && !confirm("remove them?") {
 		fmt.Println("nothing removed")

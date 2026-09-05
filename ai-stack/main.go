@@ -133,6 +133,23 @@ func usagef(format string, args ...any) error {
 	return usageError{fmt.Errorf(format, args...)}
 }
 
+// flagAfterArgs finds a flag sitting after the positional arguments. Go's flag
+// package stops parsing at the first word that is not a flag, so "models gc -y"
+// leaves -y in the argument list instead of setting it. The mistake is easy to
+// make and "too many arguments" explains it badly.
+//
+// "-" conventionally names standard input and "--" ends the flags, so neither
+// counts as a misplaced flag. No role or model name starts with a dash, which
+// is what makes this check safe to apply to every argument.
+func flagAfterArgs(args []string) (string, bool) {
+	for _, a := range args {
+		if len(a) > 1 && a[0] == '-' && a != "--" {
+			return a, true
+		}
+	}
+	return "", false
+}
+
 func exitCode(err error) int {
 	var ue usageError
 	switch {

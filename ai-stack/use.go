@@ -20,10 +20,13 @@ func useCommand() *command {
 
 	return &command{
 		name:  "use",
-		usage: "use <role> <model>",
+		usage: "use [-deployed] <role> <model>",
 		short: "Point a role at a different model",
 		flags: fs,
 		run: func(_ context.Context, args []string) error {
+			if f, ok := flagAfterArgs(args); ok {
+				return usagef("%s: flags go before the arguments, as in \"ai-stack use -deployed <role> <model>\"", f)
+			}
 			if len(args) != 2 {
 				return usagef("use takes a role and a model; roles are %s", roleNames())
 			}

@@ -11,8 +11,8 @@ Usage:
 	ai-stack update [-q]
 	ai-stack status
 	ai-stack doctor
-	ai-stack models [sync|gc] [-y] [-q]
-	ai-stack use <role> <model> [-deployed]
+	ai-stack models [-y] [-n] [-q] [sync|gc]
+	ai-stack use [-deployed] <role> <model>
 	ai-stack version
 
 The other commands — ai-hear, ai-ask, ai-sum, ai-tr — install what they need on
@@ -66,15 +66,33 @@ doctor exits 3 when anything failed, so a script can act on it.
 
 # models
 
-With no argument, lists every installed model with its size and the role that
-claims it.
+With no argument, lists every installed model with its size and whatever claims
+it.
 
 	ai-stack models sync    download what a bound role names and is missing
-	ai-stack models gc      remove installed models no role points at
+	ai-stack models gc      remove installed models nothing claims
+
+Flags come before the argument, because the flag package stops parsing at the
+first word that is not one — "models gc -y" leaves -y as a second argument
+rather than setting it:
+
+	ai-stack models -n gc   list what gc would remove and delete nothing
+	ai-stack models -y gc   delete without being asked
 
 gc asks before deleting, and answers no on a non-interactive standard input: a
 model is a multi-gigabyte download and the roles might simply be misconfigured.
-Pass -y to skip the question.
+For the same reason it refuses outright when there is no config file, since
+then the roles are nothing but their built-in defaults.
+
+Roles are not the only thing that uses a model, and gc only sees roles. The
+Kronk server hands models to whatever asks it — an editor, a one-off script —
+and those callers name a model instead of going through a role, which makes
+their models look like garbage here. List them in the config to protect them:
+
+	AI_MODELS_KEEP=Qwen/Qwen3-8B-Q8_0, unsloth/gemma-4-E4B-it-Q4_K_M
+
+They then read as "keep" in ai-stack models, and gc leaves them alone even
+under -y.
 
 # use
 
