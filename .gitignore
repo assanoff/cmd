@@ -3,14 +3,15 @@
 go.work
 go.work.sum
 
-# Binaries built in place.
-/ai-hear/ai-hear
-/ai-ask/ai-ask
-/ai-sum/ai-sum
-/ai-tr/ai-tr
-/ai-stack/ai-stack
-/radio/radio
-/chapters/chapters
+# `make build` puts every binary here, so one line covers all of them and a new
+# command needs no edit — the same "discovered, not maintained by hand" rule the
+# Makefile follows for the module list.
+/bin/
+
+# A safety net for building by hand inside a module (`cd ai-sum && go build .`),
+# which drops the binary next to the source. Only the Windows spelling can be
+# matched generically; an extensionless one shows up in `git status`.
+*.exe
 
 # Coverage artifacts, written per module by `make cover`.
 coverdata/

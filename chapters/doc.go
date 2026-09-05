@@ -83,5 +83,11 @@ beside it, and files without one are left alone.
 
 ffmpeg and ffprobe. Chapters go in through ffmpeg's own metadata format;
 nothing else is needed and no library is linked in.
+
+The alternative was mutagen, the library the Python pipeline this replaces
+used. It works, but it asks every machine that publishes a mix to carry a
+Python install — and because that dependency was never actually met, the ID3
+chapters that pipeline meant to write were never written at all. ffmpeg was
+already required by everything around this.
 */
 package main

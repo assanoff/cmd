@@ -47,8 +47,8 @@ tidy: ## Run go mod tidy
 	@for m in $(MODS); do echo ">> tidy $$m"; (cd $$m && $(GO) mod tidy); done
 
 .PHONY: build
-build: ## Build each command's binary in its own directory (gitignored)
-	@for m in $(MODS); do echo ">> build $$m"; (cd $$m && $(GO) build .); done
+build: ## Build each command's binary into ./bin (gitignored)
+	@for m in $(MODS); do echo ">> build $$m"; (cd $$m && $(GO) build -o ../bin/ .); done
 
 .PHONY: install
 install: ## go install each command into GOBIN
@@ -103,7 +103,8 @@ tools: ## Install the dev tools (golangci-lint, gofumpt, tparse)
 
 .PHONY: clean
 clean: ## Remove built binaries and coverage data
-	@for m in $(MODS); do rm -f $$m/$$m; rm -rf $$m/coverdata; done
+	@for m in $(MODS); do rm -f bin/$$m bin/$$m.exe; rm -rf $$m/coverdata; done
+	@rmdir bin 2>/dev/null || true
 	@echo ">> cleaned"
 
 # -------------------------------------------------------------------- version
