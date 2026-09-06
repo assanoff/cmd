@@ -1,8 +1,14 @@
 .DEFAULT_GOAL := help
 
 GO      ?= go
-LINT    ?= golangci-lint
 ORIGIN  ?= origin
+
+# NOT named LINT: GNU make defines LINT = lint among its built-in variables, and
+# `?=` only assigns when a variable is undefined — so `LINT ?= golangci-lint`
+# silently kept make's value and the lint target ran a program named "lint" that
+# does not exist here. The gate reported "command not found" and `make check`
+# had never actually linted anything.
+LINT_BIN ?= golangci-lint
 
 # Every directory with a go.mod is a command and its own module, so the module
 # list is discovered rather than maintained by hand.
@@ -78,7 +84,7 @@ cover: ## Write a coverage profile per module and render the HTML
 
 .PHONY: lint
 lint: ## Run golangci-lint
-	@for m in $(MODS); do echo ">> lint $$m"; (cd $$m && $(LINT) run); done
+	@for m in $(MODS); do echo ">> lint $$m"; (cd $$m && $(LINT_BIN) run); done
 
 .PHONY: fmt
 fmt: ## Format code

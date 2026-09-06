@@ -233,14 +233,25 @@ func runFile(audio, list, out, plOut, title string) error {
 
 	say("writing %d chapters into %s", len(chs), filepath.Base(audio))
 
+	// -o naming the input itself is the in-place case, however it was spelled:
+	// embed would hand ffmpeg the same file as source and destination, and the
+	// mix would be gone. Route it through the temporary instead of refusing —
+	// "put the chapters into this file" is what the caller meant — but say so,
+	// because it is not what -o normally does.
 	dest := out
-	if dest == "" {
+	switch {
+	case dest == "" || sameFile(dest, audio):
+		if dest != "" {
+			say("-o names the input itself — writing in place")
+		}
 		if err := writeInPlace(audio, *flagCover, title, meta); err != nil {
 			return err
 		}
 		dest = audio
-	} else if err := embed(audio, dest, *flagCover, title, meta); err != nil {
-		return err
+	default:
+		if err := embed(audio, dest, *flagCover, title, meta); err != nil {
+			return err
+		}
 	}
 
 	fmt.Println(dest)

@@ -62,7 +62,12 @@ still found when standard input is closed — inside a script, or under cron.
 
 Without -o the file is rewritten in place, through a temporary in the same
 directory, so an interrupted run cannot leave a half-written mix where the
-original was. With -o the original is untouched.
+original was. With -o the original is untouched — unless -o names that very
+file, however it is spelled ("./mix.mp3", an absolute path, a symlink), which
+is the in-place case again and takes the same temporary. It has to be caught
+here: ffmpeg's own same-file check compares the two paths as strings, so a
+different spelling of one file passes it, and ffmpeg truncates the source while
+still reading it.
 
 Running it again is the normal case, not an accident: a wrong timestamp is
 something you notice after listening. Fix the tracklist, run it again, and the

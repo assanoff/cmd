@@ -167,7 +167,6 @@ func checkTools(r *report) {
 // bundle is the quiet failure worth catching: transcription simply does not
 // work, and nothing says why until you try.
 func checkLibs(ctx context.Context, r *report) {
-
 	if lib, err := libs.New(libs.WithDetect(ctx, silent)); err != nil {
 		r.bad("llama.cpp: %v", err)
 	} else if tags := toTags(lib.List()); len(tags) == 0 {

@@ -93,8 +93,10 @@ func embed(src, dest, cover, title string, meta []byte) error {
 		return err
 	}
 
-	args := []string{"-hide_banner", "-loglevel", "error", "-y",
-		"-i", src, "-i", metaFile.Name()}
+	args := []string{
+		"-hide_banner", "-loglevel", "error", "-y",
+		"-i", src, "-i", metaFile.Name(),
+	}
 	if cover != "" {
 		args = append(args, "-i", cover)
 	}
@@ -161,4 +163,22 @@ func writeInPlace(path, cover, title string, meta []byte) error {
 		os.Chmod(tmpName, info.Mode().Perm())
 	}
 	return os.Rename(tmpName, path)
+}
+
+// sameFile reports whether two paths name one file on disk. ffmpeg has a
+// same-file guard of its own, but it compares the two URL strings, so "set.mp3"
+// and "./set.mp3" slip past it: ffmpeg then opens the output for writing, which
+// truncates it, and goes on reading the same bytes it just discarded. Stat
+// follows symlinks and compares identity rather than spelling; a destination
+// that does not exist yet cannot be the source, so a failed Stat means "no".
+func sameFile(a, b string) bool {
+	ai, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	bi, err := os.Stat(b)
+	if err != nil {
+		return false
+	}
+	return os.SameFile(ai, bi)
 }
