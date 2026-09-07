@@ -100,9 +100,11 @@ the only form `go install github.com/assanoff/cmd/radio@v0.1.0` can resolve:
 git tag radio/v0.1.0
 ```
 
-The `Makefile` does the tagging, and checks the version before it does. Each
-command reports the version it was built from through `-version`, read out of
-the build info Go stamps into a binary installed from a tag.
+The `Makefile` does the tagging, and checks the version before it does — the
+targets below are thin wrappers over `scripts/release.sh`, which is where the
+version arithmetic and the checks live. Each command reports the version it was
+built from through `-version`, read out of the build info Go stamps into a
+binary installed from a tag.
 
 ```sh
 make versions                       # what every command is at
