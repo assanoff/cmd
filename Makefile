@@ -3,14 +3,13 @@
 GO      ?= go
 ORIGIN  ?= origin
 
-<<<<<<< HEAD
 # NOT named LINT: GNU make defines LINT = lint among its built-in variables, and
 # `?=` only assigns when a variable is undefined — so `LINT ?= golangci-lint`
 # silently kept make's value and the lint target ran a program named "lint" that
 # does not exist here. The gate reported "command not found" and `make check`
 # had never actually linted anything.
 LINT_BIN ?= golangci-lint
-=======
+
 # The version and release logic lives in a script: it is ordinary shell there,
 # not shell escaped through make. The script reads MOD, VERSION, FORCE, ORIGIN
 # and GO from the environment; MOD and friends are exported automatically
@@ -18,7 +17,6 @@ LINT_BIN ?= golangci-lint
 RELEASE := scripts/release.sh
 export GO
 export ORIGIN
->>>>>>> 36b9c06 (feat: implement release management script and update Makefile for versioning)
 
 # Every directory with a go.mod is a command and its own module, so the module
 # list is discovered rather than maintained by hand.
