@@ -6,6 +6,7 @@
 package tr
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -26,13 +27,23 @@ const (
 	Short = "Translate text with a local language model"
 	Long  = `Translates text with a local language model.
 
+With no -t the target is $AI_OUT_LANG, the same language ai sum writes in: the
+recording is usually the thing not in the language you read, so translating
+towards yourself is the common direction and naming it every time is noise.
+Name one with -t to go the other way.
+
 With no file arguments tr reads standard input and writes the translation to
 standard output. Given subtitles and --keep-format it translates only the
 spoken text and leaves every timing untouched, which is what lets times
 survive a pipeline:
 
-    ai hear -f srt talk.mkv | ai tr -t en --keep-format | ai sum -s chapters`
+    ai hear -f srt talk.mkv | ai tr --keep-format | ai sum -s chapters`
 )
+
+// defaultOutLang is the target language when neither -t nor AI_OUT_LANG says
+// one. It only decides what happens on a machine with no config; anyone who
+// has set AI_OUT_LANG never reaches it.
+const defaultOutLang = "ru"
 
 // defaultMapTokens is the size of one translation piece. Smaller than sum's
 // chunk because the answer here is as long as the input rather than a summary
@@ -43,7 +54,7 @@ const defaultMapTokens = 2000
 type Command struct {
 	ctx context.Context
 
-	To         string  `short:"t" long:"to" default:"en" value-name:"CODE" description:"language to translate into, by short code such as en or ru"`
+	To         string  `short:"t" long:"to" value-name:"CODE" description:"language to translate into, by short code such as ru or en; defaults to $AI_OUT_LANG"`
 	From       string  `short:"F" long:"from" value-name:"CODE" description:"source language; empty lets the model work it out"`
 	Model      string  `short:"m" long:"model" value-name:"NAME" description:"a role (fast, smart, code) or a canonical provider/modelID"`
 	KeepFormat bool    `long:"keep-format" description:"for srt and vtt input, translate only the text and leave every timing alone"`
@@ -70,9 +81,14 @@ func (c *Command) Execute([]string) error {
 		return err
 	}
 
-	to := strings.ToLower(strings.TrimSpace(c.To))
+	// -t used to default to English, which had the direction backwards. The
+	// recording being translated is usually the one not in the language its
+	// reader wants, so the target is whatever that reader reads -- the same
+	// AI_OUT_LANG that decides what ai sum writes in. English stays as the last
+	// resort for a machine with no config at all.
+	to := strings.ToLower(strings.TrimSpace(cmp.Or(c.To, config.Value("AI_OUT_LANG"), defaultOutLang)))
 	if to == "" {
-		return cli.Usagef("-t needs a language code such as en or ru")
+		return cli.Usagef("-t needs a language code such as ru or en")
 	}
 
 	p := cli.NewPrinter(Name, c.Quiet)
@@ -111,7 +127,7 @@ func (c *Command) Execute([]string) error {
 		return nil
 	}
 
-	model := config.Resolve(c.Model, config.RoleFast)
+	model := config.Resolve(c.Model, config.RoleSmart)
 	if c.DryRun {
 		c.describe(jobs, model, to)
 		return nil

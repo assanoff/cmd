@@ -29,7 +29,7 @@ llama.cpp or whisper.cpp bundle for this machine and the requested model into
 Every command reads standard input and writes standard output when given no
 file arguments, so they compose:
 
-	ai hear lecture.mkv | ai tr -t en | ai sum -s brief
+	ai hear lecture.mkv | ai tr | ai sum -s brief
 
 Times travel through the pipeline as subtitles. "ai hear -f srt" writes them,
 "ai tr --keep-format" translates the words and leaves the timings alone, and
