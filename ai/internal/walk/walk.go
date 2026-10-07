@@ -177,7 +177,7 @@ func (r Request) outPath(src source) string {
 
 func extSet(list string) map[string]bool {
 	set := make(map[string]bool)
-	for _, ext := range strings.Split(list, ",") {
+	for ext := range strings.SplitSeq(list, ",") {
 		ext = strings.ToLower(strings.TrimPrefix(strings.TrimSpace(ext), "."))
 		if ext != "" {
 			set[ext] = true

@@ -140,7 +140,7 @@ func splitOversized(ctx context.Context, tk Tokenizer, para string, limit int) (
 // here anyway.
 func paragraphs(text string) []string {
 	var out []string
-	for _, block := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n\n") {
+	for block := range strings.SplitSeq(strings.ReplaceAll(text, "\r\n", "\n"), "\n\n") {
 		if block = strings.TrimSpace(block); block != "" {
 			out = append(out, block)
 		}

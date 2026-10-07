@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/jessevdk/go-flags"
@@ -68,8 +69,7 @@ func run(ctx context.Context, args []string) int {
 
 	rest, err := parser.ParseArgs(args)
 	if err != nil {
-		var fe *flags.Error
-		if errors.As(err, &fe) {
+		if fe, ok := errors.AsType[*flags.Error](err); ok {
 			// Asking for help is a success, and the help itself is the output
 			// the caller wanted, so it goes to standard output.
 			if fe.Type == flags.ErrHelp {
@@ -147,11 +147,14 @@ server, and Kronk, its yzma binding and llama.cpp are only tested together.`
 // "ai sum" is explained by "ai sum -h", not by the top-level help, and the
 // parser already knows which subcommand it had reached.
 func helpFor(parser *flags.Parser) string {
-	name := "ai"
+	var name strings.Builder
+	name.WriteString("ai")
 	for c := parser.Active; c != nil; c = c.Active {
-		name += " " + c.Name
+		name.WriteByte(' ')
+		name.WriteString(c.Name)
 	}
-	return name + " -h"
+	name.WriteString(" -h")
+	return name.String()
 }
 
 func fatal(err error) int {

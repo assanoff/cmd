@@ -161,7 +161,7 @@ func (t translator) batch(ctx context.Context, instruction string, batch []subs.
 
 	got := make([]string, len(batch))
 	seen := 0
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		n, text, ok := splitNumber(line)
 		if !ok || n < 1 || n > len(batch) || got[n-1] != "" {
 			continue

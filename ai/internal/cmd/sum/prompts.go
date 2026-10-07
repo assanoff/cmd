@@ -66,7 +66,7 @@ func parseStyles(v string) ([]string, error) {
 		out  []string
 		seen = make(map[string]bool)
 	)
-	for _, name := range strings.Split(v, ",") {
+	for name := range strings.SplitSeq(v, ",") {
 		name = strings.ToLower(strings.TrimSpace(name))
 		if name == "" {
 			continue

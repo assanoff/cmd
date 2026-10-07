@@ -89,8 +89,7 @@ func TestStdinCannotJoinABatch(t *testing.T) {
 		Exts:   "txt", OutExt: ".txt",
 	})
 
-	var be *BatchError
-	if !errors.As(err, &be) {
+	if _, ok := errors.AsType[*BatchError](err); !ok {
 		t.Fatalf("err = %v, want a *BatchError", err)
 	}
 }
