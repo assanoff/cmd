@@ -16,6 +16,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	bmodel "github.com/ardanlabs/kronk/sdk/bucky/model"
+
 	"github.com/assanoff/cmd/ai/internal/cli"
 )
 
@@ -55,18 +57,19 @@ func (e *Engine) TranscribePath(ctx context.Context, path string, o Options) (Tr
 		return Transcription{}, err
 	}
 
+	var samples []float32
 	if native(head[:n]) {
 		if _, err := f.Seek(0, io.SeekStart); err != nil {
 			return Transcription{}, err
 		}
-		return e.b.TranscribeFile(ctx, f, o.options()...)
+		samples, err = bmodel.Decode(ctx, f)
+	} else {
+		samples, err = decode(ctx, path)
 	}
-
-	samples, err := decode(ctx, path)
 	if err != nil {
 		return Transcription{}, err
 	}
-	return e.b.Transcribe(ctx, samples, o.options()...)
+	return e.transcribe(ctx, samples, o)
 }
 
 // native reports whether the SDK decodes this container itself. It mirrors the

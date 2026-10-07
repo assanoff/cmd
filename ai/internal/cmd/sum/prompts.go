@@ -31,18 +31,26 @@ func render(name, lang string) (string, error) {
 
 // styles are the summary shapes sum knows, in the order they read best as
 // sections of one document: the point first, then the vocabulary needed to
-// follow it, then the body, then the details worth keeping. The map style is
-// not one of them: it compresses a chunk on the way to a summary and is never
-// asked for directly.
-var styles = []string{"brief", "terms", "chapters", "facts", "tips", "actions"}
+// follow it, then the body, then what the body adds up to, then the details
+// worth keeping. The map style is not one of them: it compresses a chunk on
+// the way to a summary and is never asked for directly.
+//
+// The order is also a ladder of length. tldr is a sentence, brief a paragraph,
+// chapters an outline, article the whole thing rewritten to be read instead of
+// watched. Asking for several gives one document that can be entered at
+// whatever depth the reader has time for.
+var styles = []string{"tldr", "brief", "terms", "chapters", "article", "insights", "facts", "tips", "actions"}
 
 // sectionTitles name the sections when several styles are asked for at once.
 // They are written in the summary language, and unlike the prompts they cannot
 // be left in English: a Russian document with English headings reads as a bug.
 var sectionTitles = map[string]map[string]string{
+	"tldr":     {"en": "In one line", "ru": "Коротко"},
 	"brief":    {"en": "In short", "ru": "Главное"},
 	"terms":    {"en": "Terms", "ru": "Термины"},
 	"chapters": {"en": "By topic", "ru": "По темам"},
+	"article":  {"en": "In full", "ru": "Подробно"},
+	"insights": {"en": "What it adds up to", "ru": "Выводы"},
 	"facts":    {"en": "Facts", "ru": "Факты"},
 	"tips":     {"en": "Tips and tricks", "ru": "Приёмы и трюки"},
 	"actions":  {"en": "Action items", "ru": "Действия"},

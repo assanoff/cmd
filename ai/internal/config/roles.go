@@ -14,6 +14,7 @@ import (
 const (
 	RoleFast    = "fast"
 	RoleSmart   = "smart"
+	RoleDeep    = "deep"
 	RoleCode    = "code"
 	RoleEmbed   = "embed"
 	RoleASR     = "asr"
@@ -56,6 +57,7 @@ type Role struct {
 var Roles = []Role{
 	{RoleFast, "AI_MODEL_FAST", BackendLlama, DefaultFast},
 	{RoleSmart, "AI_MODEL_SMART", BackendLlama, ""},
+	{RoleDeep, "AI_MODEL_DEEP", BackendLlama, ""},
 	{RoleCode, "AI_MODEL_CODE", BackendLlama, ""},
 	{RoleEmbed, "AI_MODEL_EMBED", BackendLlama, ""},
 	{RoleASR, "AI_ASR_MODEL", BackendWhisper, "large-v3-turbo"},
@@ -73,9 +75,15 @@ var Roles = []Role{
 // "asr-fast" deliberately does not fall back to "asr": asking for the fast
 // transcriber and silently getting the large one is the opposite of the
 // request.
+//
+// "deep" does fall back to "smart", and the asymmetry is deliberate. Asking
+// for the slower, better model and getting the ordinary one costs you quality
+// you hoped for; asking for the fast one and getting the slow one costs you an
+// hour you did not budget. Only the second is a trap.
 var fallbacks = map[string][]string{
 	RoleFast:    {RoleFast},
 	RoleSmart:   {RoleSmart, RoleFast},
+	RoleDeep:    {RoleDeep, RoleSmart, RoleFast},
 	RoleCode:    {RoleCode, RoleSmart, RoleFast},
 	RoleEmbed:   {RoleEmbed},
 	RoleASR:     {RoleASR},

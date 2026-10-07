@@ -97,16 +97,24 @@ func (t translator) text(ctx context.Context, body string, limit int) (string, e
 }
 
 // cueBatch is how many cues go into one call. Large enough that a 500-cue
-// subtitle file is not 500 round trips, small enough that the model keeps the
-// numbering straight and a mismatch costs little to redo.
+// subtitle file is not 500 round trips, small enough that a mismatch costs
+// little to redo.
+//
+// Twenty survived a measurement against ten. The model loses a number often
+// enough that four batches of twenty out of seven came back misnumbered, which
+// argues for a smaller batch — but ten fails too, about a quarter of the time,
+// and halving a failure already recovers most of what a smaller batch would
+// save. Over the same 130 cues: twenty with splitting took about 23 calls, ten
+// would take about 22, and twenty with the old retry took 87. The first two
+// are the same number; the batch size is not where the win was.
 const cueBatch = 20
 
 // cues renders subtitle text while leaving every timing untouched.
 //
 // Cues go out numbered and must come back numbered. A model that drops, merges
 // or invents an item would silently shift every subsequent subtitle against
-// its timing, so a batch whose numbering does not come back intact is redone
-// one cue at a time rather than trusted.
+// its timing, so a batch whose numbering does not come back intact is split
+// and redone rather than trusted.
 func (t translator) cues(ctx context.Context, cues []subs.Cue) error {
 	instruction, err := t.instruction("subtitles")
 	if err != nil {
@@ -115,35 +123,58 @@ func (t translator) cues(ctx context.Context, cues []subs.Cue) error {
 
 	for start := 0; start < len(cues); start += cueBatch {
 		end := min(start+cueBatch, len(cues))
-		batch := cues[start:end]
 		t.p.Printf("cues %d-%d of %d", start+1, end, len(cues))
 
-		got, err := t.batch(ctx, instruction, batch)
-		if err != nil {
+		if err := t.span(ctx, instruction, cues[start:end]); err != nil {
 			return err
-		}
-		if got != nil {
-			for i := range batch {
-				batch[i].Text = got[i]
-			}
-			continue
-		}
-
-		// The numbering came back wrong. One call per cue cannot misalign.
-		t.p.Printf("numbering came back wrong; redoing %d cues one by one", len(batch))
-		for i := range batch {
-			if strings.TrimSpace(batch[i].Text) == "" {
-				continue
-			}
-			out, err := t.chat(ctx, instruction, "1. "+batch[i].Text)
-			if err != nil {
-				return err
-			}
-			batch[i].Text = stripNumber(out)
 		}
 	}
 
 	return nil
+}
+
+// span translates one run of cues, halving it whenever the numbering does not
+// survive the round trip, until a half comes back intact or one cue is left.
+//
+// Going straight from a failed batch to one call per cue was the first version
+// and it was far too harsh. On a real subtitle file 12 batches of 20 fail the
+// check, and which ones differ from run to run -- the model simply drops a
+// number now and then, so the failures are spread rather than tied to any
+// particular stretch. Retrying each failure cue by cue turned 21 calls into
+// roughly 250. Halving costs three calls where the old path cost twenty-one,
+// and a half that comes back numbered correctly is just as safe: the guard
+// that rejected the batch is the same one that accepts the half.
+func (t translator) span(ctx context.Context, instruction string, batch []subs.Cue) error {
+	got, err := t.batch(ctx, instruction, batch)
+	if err != nil {
+		return err
+	}
+	if got != nil {
+		for i := range batch {
+			batch[i].Text = got[i]
+		}
+		return nil
+	}
+
+	// One call for one cue cannot misalign, so this is where splitting stops.
+	if len(batch) == 1 {
+		if strings.TrimSpace(batch[0].Text) == "" {
+			return nil
+		}
+		out, err := t.chat(ctx, instruction, "1. "+batch[0].Text)
+		if err != nil {
+			return err
+		}
+		batch[0].Text = stripNumber(out)
+		return nil
+	}
+
+	half := len(batch) / 2
+	t.p.Printf("numbering came back wrong; splitting %d cues into %d and %d", len(batch), half, len(batch)-half)
+	if err := t.span(ctx, instruction, batch[:half]); err != nil {
+		return err
+	}
+	return t.span(ctx, instruction, batch[half:])
 }
 
 // batch returns one translation per cue, or nil when the numbering did not

@@ -57,7 +57,7 @@ const (
 type Command struct {
 	ctx context.Context
 
-	Style     string        `short:"s" long:"style" default:"chapters" description:"summary style, or several separated by commas: brief, chapters, facts, actions, terms, tips"`
+	Style     string        `short:"s" long:"style" default:"chapters" description:"summary style, or several separated by commas: tldr, brief, terms, chapters, article, insights, facts, tips, actions"`
 	Lang      string        `short:"L" long:"lang" value-name:"CODE" description:"language to write the summary in; defaults to $AI_OUT_LANG"`
 	Model     string        `short:"m" long:"model" value-name:"NAME" description:"a role (smart, fast, code) or a canonical provider/modelID"`
 	MapTokens int           `long:"map-tokens" description:"chunk size in tokens for the map phase; defaults to $AI_MAP_TOKENS"`

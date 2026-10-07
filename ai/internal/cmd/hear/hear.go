@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/assanoff/cmd/ai/internal/asr"
 	"github.com/assanoff/cmd/ai/internal/cli"
@@ -155,6 +156,14 @@ func (c *Command) options(p *cli.Printer) asr.Options {
 		Words:     c.Words,
 	}
 	if !p.Quiet() {
+		// Whisper says nothing until it is finished, so this is the only sign
+		// of life a long recording gives. It reports the length of the audio
+		// too, because "4m0s elapsed" means one thing against five minutes of
+		// speech and quite another against two hours.
+		o.Waiting = func(elapsed, audio time.Duration) {
+			p.Printf("still decoding: %s so far, %s of audio", elapsed, audio.Round(time.Second))
+		}
+
 		// Decoding shows as it happens, on standard error so the transcript on
 		// standard output stays clean.
 		o.OnSegment = func(seg asr.Segment) {

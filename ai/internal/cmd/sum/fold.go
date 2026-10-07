@@ -98,13 +98,39 @@ func (f folder) summarize(ctx context.Context, text string, styles []string, lan
 		if len(styles) == 1 {
 			return out, nil
 		}
-		sections = append(sections, "## "+sectionTitle(style, lang)+"\n\n"+out)
+		sections = append(sections, "## "+sectionTitle(style, lang)+"\n\n"+demote(out))
 	}
 
 	if len(sections) == 0 {
 		return "", fmt.Errorf("the model produced no sections")
 	}
 	return strings.Join(sections, "\n\n"), nil
+}
+
+// demote pushes every Markdown heading in a style's output down one level.
+//
+// A section of a combined summary is introduced by "## " and its own title,
+// and two of the styles -- chapters and article -- are themselves built out of
+// "## " headings. Left alone they come out as siblings of that title rather
+// than as its contents, which reads as the section being empty and the rest of
+// the document having lost its shape. A lone style is returned untouched,
+// because then there is no wrapper for it to be a sibling of.
+//
+// Fenced code is skipped: a "### " inside a fence is a comment in someone's
+// shell snippet, not a heading.
+func demote(s string) string {
+	lines := strings.Split(s, "\n")
+	var fenced bool
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			fenced = !fenced
+			continue
+		}
+		if !fenced && isHeading(line) {
+			lines[i] = "#" + line
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // fold reduces the document until it fits in one call, and returns what is
@@ -257,4 +283,17 @@ func foldDone(n, previous, limit, round int) (done bool, why string) {
 	default:
 		return false, ""
 	}
+}
+
+// isHeading reports whether the line is an ATX heading with room to move down.
+// The space matters: "#tag" is a word that happens to start with a hash, and
+// six hashes are already the deepest Markdown has, so a seventh would render
+// as text rather than as a heading.
+func isHeading(line string) bool {
+	n := len(line) - len(strings.TrimLeft(line, "#"))
+	if n == 0 || n > 5 {
+		return false
+	}
+	rest := line[n:]
+	return rest == "" || strings.HasPrefix(rest, " ")
 }

@@ -16,6 +16,7 @@ package asr
 import (
 	"context"
 	"io"
+	"time"
 
 	"github.com/ardanlabs/kronk/sdk/bucky"
 	bmodel "github.com/ardanlabs/kronk/sdk/bucky/model"
@@ -106,15 +107,62 @@ type Options struct {
 	Translate bool
 	// Words asks for word-level timestamps.
 	Words bool
-	// OnSegment, when set, is called as each segment is decoded.
+	// OnSegment, when set, is called once per segment.
+	//
+	// Not as decoding happens, despite how it reads: the SDK runs whisper to
+	// completion and only then walks the segments, calling this for each. It is
+	// a replay of a finished transcript, which is why Waiting exists.
 	OnSegment func(Segment)
+
+	// Waiting, when set, is called every half minute for as long as the decoder
+	// is running, with how long it has been going and how much audio it was
+	// given. Nothing else reports progress: whisper.cpp can print its own, but
+	// the SDK hard-codes that off, and no callback arrives until the end. A
+	// nineteen-minute recording otherwise looks like a hung command.
+	Waiting func(elapsed, audio time.Duration)
 }
 
-// Transcribe decodes one input. The SDK takes the whole stream, so there is no
-// chunking here: anything ffmpeg can read goes in as it is, and the segment
-// timings come back relative to the start of the file.
+// Transcribe decodes one stream. A file on disk goes through TranscribePath
+// instead, which can let ffmpeg seek; this is the path standard input takes.
 func (e *Engine) Transcribe(ctx context.Context, r io.Reader, o Options) (Transcription, error) {
-	return e.b.TranscribeFile(ctx, r, o.options()...)
+	samples, err := bmodel.Decode(ctx, r)
+	if err != nil {
+		return Transcription{}, err
+	}
+	return e.transcribe(ctx, samples, o)
+}
+
+// transcribe is where both input paths meet. Decoding happens before it so the
+// length of the audio is known here, which is the only thing that makes the
+// wait legible while whisper is busy.
+func (e *Engine) transcribe(ctx context.Context, samples []float32, o Options) (Transcription, error) {
+	defer o.waiting(ctx, time.Duration(len(samples))*time.Second/sampleRate)()
+	return e.b.Transcribe(ctx, samples, o.options()...)
+}
+
+// waiting starts the heartbeat and returns the function that stops it.
+func (o Options) waiting(ctx context.Context, audio time.Duration) func() {
+	if o.Waiting == nil {
+		return func() {}
+	}
+
+	done := make(chan struct{})
+	go func() {
+		start := time.Now()
+		tick := time.NewTicker(30 * time.Second)
+		defer tick.Stop()
+		for {
+			select {
+			case <-tick.C:
+				o.Waiting(time.Since(start).Round(time.Second), audio)
+			case <-done:
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	return func() { close(done) }
 }
 
 func (o Options) options() []bmodel.TranscribeOption {
