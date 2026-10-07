@@ -67,10 +67,20 @@ ai stack: then run ai stack update again, and ai stack doctor to confirm.
 
 // installLibs installs both native bundles: llama.cpp for text models and
 // whisper.cpp for speech. Each is a no-op when already at the pinned version.
+//
+// Both are asked to validate, which is what every example in the Kronk
+// repository does: Download then checks the installed files against the
+// publisher's digests instead of trusting that an extract that did not report
+// an error produced a complete bundle. A half-written .so is otherwise found
+// by llama.cpp, inside a run, as a crash.
+//
+// Validation lives here and not in the inference path on purpose. It costs a
+// manifest fetch and a hash of every library file, which is nothing once at
+// install time and a tax on every "ai ask" if it ran there.
 func installLibs(ctx context.Context, p *cli.Printer) error {
 	log := p.Logger()
 
-	lib, err := libs.New(libs.WithDetect(ctx, log))
+	lib, err := libs.New(libs.WithDetect(ctx, log), libs.WithValidation(true))
 	if err != nil {
 		return cli.NotSetupf("selecting llama.cpp libraries: %w", err)
 	}
@@ -80,7 +90,7 @@ func installLibs(ctx context.Context, p *cli.Printer) error {
 	}
 	fmt.Printf("llama.cpp   %s  %s/%s/%s\n", llama.Version, llama.OS, llama.Arch, llama.Processor)
 
-	blib, err := buckylibs.New(buckylibs.WithDetect(ctx, log))
+	blib, err := buckylibs.New(buckylibs.WithDetect(ctx, log), buckylibs.WithValidation(true))
 	if err != nil {
 		return cli.NotSetupf("selecting whisper.cpp libraries: %w", err)
 	}

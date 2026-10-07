@@ -109,17 +109,21 @@ func checkSelf(r *report) {
 	fmt.Println("           $(go env GOBIN)/ai-tr $(go env GOBIN)/ai-stack")
 }
 
-// checkTools verifies the external programs the subcommands shell out to.
-// ffmpeg is not optional: hear decodes anything that is not a plain WAV
-// through it.
+// checkTools verifies the external programs ai reaches for. There is one, and
+// it is not required: the SDK's decoder reads WAV, MP3 and FLAC in process and
+// shells out to ffmpeg only for a container it cannot open itself -- WebM/Opus,
+// MP4/AAC, OGG, M4A. A missing ffmpeg narrows what hear accepts rather than
+// breaking it, so it is a warning and not a failure.
+//
+// ffprobe was checked here too and should not have been. Nothing in ai runs it;
+// the chapters and radio commands do, and those are separate binaries.
 func checkTools(r *report) {
-	for _, tool := range []string{"ffmpeg", "ffprobe"} {
-		if path, err := exec.LookPath(tool); err != nil {
-			r.bad("%s: not in PATH (ai hear needs it for anything but plain WAV)", tool)
-		} else {
-			r.ok("%s at %s", tool, path)
-		}
+	path, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		r.warn("ffmpeg: not in PATH; ai hear is limited to WAV, MP3 and FLAC")
+		return
 	}
+	r.ok("ffmpeg at %s", path)
 }
 
 // checkLibs verifies both native bundles are installed. A missing whisper

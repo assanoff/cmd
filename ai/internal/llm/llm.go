@@ -72,6 +72,12 @@ func New(ctx context.Context, name string, log kronk.Logger, report *cli.Printer
 	// subcommand here has an opinion about either.
 	krn, err := kronk.New(
 		kmodel.WithModelFiles(mp.ModelFiles),
+		// A multimodal model is two artifacts, weights and a projector, and
+		// Download returns both. The SDK ignores an empty ProjFile, so passing
+		// it unconditionally costs nothing for the text models the roles
+		// normally name and is what stops a vision or omni model bound to a
+		// role from loading without half of itself.
+		kmodel.WithProjFile(mp.ProjFile),
 		kmodel.WithAutoTune(true),
 	)
 	if err != nil {
