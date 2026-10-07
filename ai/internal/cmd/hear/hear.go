@@ -9,6 +9,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/assanoff/cmd/ai/internal/asr"
@@ -116,13 +117,9 @@ func (c *Command) Execute([]string) error {
 func (c *Command) one(eng *asr.Engine, p *cli.Printer, j walk.Job) error {
 	p.Printf("%s", cli.DescribeInput(j.In))
 
-	r, closeIn, err := cli.OpenInput(j.In)
-	if err != nil {
-		return err
-	}
-	defer closeIn()
-
-	tr, err := eng.Transcribe(c.ctx, r, c.options(p))
+	// A named file goes in by path so ffmpeg can seek within it; only a pipe
+	// has to be read as a stream. See asr.TranscribePath.
+	tr, err := c.decode(eng, p, j.In)
 	if err != nil {
 		return err
 	}
@@ -138,6 +135,16 @@ func (c *Command) one(eng *asr.Engine, p *cli.Printer, j walk.Job) error {
 		return err
 	}
 	return closeOut()
+}
+
+// decode transcribes one input. Standard input can only be streamed, which
+// means an unstreamable container piped in still fails; naming the file
+// instead is the fix, and that is the usual way of asking anyway.
+func (c *Command) decode(eng *asr.Engine, p *cli.Printer, in string) (asr.Transcription, error) {
+	if in == "-" {
+		return eng.Transcribe(c.ctx, os.Stdin, c.options(p))
+	}
+	return eng.TranscribePath(c.ctx, in, c.options(p))
 }
 
 func (c *Command) options(p *cli.Printer) asr.Options {
