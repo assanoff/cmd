@@ -41,8 +41,12 @@ func genCommand() *command {
 
 			if *portFlag != "" {
 				// The port belongs to one setting shared with serve, and the
-				// environment is how it reaches both.
-				os.Setenv("RADIO_PORT", *portFlag)
+				// environment is how it reaches both. A failure here would
+				// silently publish feed URLs on the wrong port, so it stops
+				// the run rather than being ignored.
+				if err := os.Setenv("RADIO_PORT", *portFlag); err != nil {
+					return err
+				}
 			}
 
 			casts, err := discover(root)

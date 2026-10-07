@@ -132,7 +132,9 @@ func lanIP() string {
 	if err != nil {
 		return ""
 	}
-	defer c.Close()
+	// Nothing was sent and nothing will be read, so there is no buffered
+	// state for this close to fail to flush.
+	defer func() { _ = c.Close() }()
 
 	addr, ok := c.LocalAddr().(*net.UDPAddr)
 	if !ok || addr.IP == nil || addr.IP.IsLoopback() || addr.IP.To4() == nil {
@@ -179,7 +181,7 @@ func loadKV(path string) map[string]string {
 	if err != nil {
 		return vals
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {

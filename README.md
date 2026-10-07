@@ -7,61 +7,112 @@ command never drags in another's dependencies.
 
 | Command | What it does |
 | ------- | ------------ |
-| [ai-hear](ai-hear) | Transcribe speech to text (whisper.cpp via the Kronk SDK) |
-| [ai-ask](ai-ask) | Run one prompt against a local language model |
-| [ai-sum](ai-sum) | Summarize text, map-reduce over long input |
-| [ai-tr](ai-tr) | Translate text with a local language model |
-| [ai-stack](ai-stack) | Install and maintain the local model stack |
+| [ai](ai) | Transcribe, prompt, summarize and translate with local models |
 | [radio](radio) | Publish a directory of audio as a podcast feed |
 | [chapters](chapters) | Write a timecoded tracklist into an audio file |
 
 ## Install
 
 ```sh
-go install github.com/assanoff/cmd/ai-hear@latest
+go install github.com/assanoff/cmd/ai@latest
 ```
 
 Every command documents itself: run it with `-h` for the flags, or read its
 `doc.go`. Go 1.27 or newer is required; `GOTOOLCHAIN=auto` fetches it for you.
 
-## The ai-* family
+One wrinkle on Windows: `ai` parses its flags with
+[go-flags](https://github.com/jessevdk/go-flags), which there renders its own
+help and errors in DOS style — `/model`, `/h` — while this README and every
+`doc.go` use `--model` and `-h`. Both spellings parse, so nothing breaks and no
+script has to change; only the generated help disagrees with the prose. The
+`forceposix` build tag would align them, at the cost of an install command
+nobody would guess and a `gup update` that silently drops it, which is a worse
+trade than the mismatch.
 
-The `ai-*` commands run models locally through
+## ai
+
+`ai` runs language and speech models locally through
 [Kronk](https://github.com/ardanlabs/kronk) — llama.cpp for text and whisper.cpp
 for speech. There is no server and no Python: the SDK downloads the native
 libraries and model files on first use and runs inference in-process.
 
-They read standard input and write standard output when given no arguments, so
-they compose:
-
-```sh
-ai-hear lecture.mkv | ai-tr -t en | ai-sum -s brief
+```
+ai hear    transcribe speech to text
+ai ask     run one prompt against a local language model
+ai sum     summarize text, map-reduce over long input
+ai tr      translate text
+ai stack   install and maintain the local model stack
 ```
 
-Times travel through the pipeline as subtitles. `ai-hear -f srt` writes them,
-`ai-tr` translates the words and leaves the timings alone, and `ai-sum` reads
-subtitles as timestamped prose — which is what makes a chapter list say where
-each chapter starts:
+Each reads standard input and writes standard output when given no arguments,
+so they compose:
 
 ```sh
-ai-hear -f srt lecture.mkv | ai-sum -s brief,terms,chapters,facts,tips -f md
+ai hear lecture.mkv | ai tr -t en | ai sum -s brief
+```
+
+Times travel through the pipeline as subtitles. `ai hear -f srt` writes them,
+`ai tr --keep-format` translates the words and leaves the timings alone, and
+`ai sum` reads subtitles as timestamped prose — which is what makes a chapter
+list say where each chapter starts:
+
+```sh
+ai hear -f srt lecture.mkv | ai sum -s brief,terms,chapters,facts,tips -f md
 ```
 
 Given file or directory arguments they process those instead, loading the model
 once for the whole batch. Roles (`fast`, `smart`, `asr`, ...) map to concrete
-model names through `~/.config/ai/config`, so no command hard-codes a model.
+model names through `~/.config/ai/config`, so nothing hard-codes a model.
+
+```sh
+ai stack install          # libraries plus every model a role names
+ai stack status           # what is installed, what each role resolves to
+ai stack doctor           # check the whole thing end to end
+ai stack use smart X      # point a role at a different model
+```
+
+### Layout
+
+One binary, one module, and the implementation under `internal/`:
+
+```
+ai/
+  main.go                 the parser and the dispatch table
+  internal/
+    cli/                  exit codes, progress, input and output
+    core/
+      llm/                the Kronk engine — every text model goes through it
+      asr/                the Bucky engine — every speech model does
+      config/             ~/.config/ai/config and the role table
+      chunk/  subs/  walk/  prompt/  lang/
+    cmd/
+      ask/  hear/  sum/  tr/  stack/
+```
+
+This was five commands in five modules before (`ai-ask`, `ai-hear`, `ai-sum`,
+`ai-tr`, `ai-stack`), each carrying its own copy of the config reader, the
+model loader and the directory walker. The copies had drifted — the same role
+resolved to different models depending on which command you asked — and a Kronk
+bump meant editing five `go.mod` files that all installed into the same
+`~/.kronk`. The single core is what that was for: `internal/core/llm` is the
+only place this program talks to the SDK, and `internal/core/asr` the only
+place it talks to whisper.
+
+If the old binaries are still on your `PATH` they will keep pulling the shared
+`~/.kronk` bundle back to whatever SDK they were built against. `ai stack
+doctor` names them; remove them.
 
 ### Keeping the Kronk version in step
 
-The `ai-*` commands share `~/.kronk` for native libraries and models, and Kronk,
-its yzma binding, and llama.cpp form a tested set. Bump them together:
+Kronk, its yzma binding and llama.cpp are a tested set, so they move together.
+With one module that is now one command:
 
 ```sh
-for d in ai-*; do (cd "$d" && go get github.com/ardanlabs/kronk@vX.Y.Z && go mod tidy); done
+cd ai && go get github.com/ardanlabs/kronk@vX.Y.Z && go mod tidy
 ```
 
-`ai-hear -version` prints the Kronk version each binary was built against, and
-`ai-stack doctor` compares them across the installed commands.
+`ai --version` prints the Kronk version the binary was built against, and
+`ai stack update` brings the native libraries to match it.
 
 ## radio and chapters
 
@@ -92,8 +143,8 @@ the rest.
 ## Versioning
 
 Every command carries its own semver line, because they are released
-independently: a fix in `radio` should not spend a version of `ai-hear`. This is
-a multi-module repository, so the tags carry the module directory as a prefix —
+independently: a fix in `radio` should not spend a version of `ai`. This is a
+multi-module repository, so the tags carry the module directory as a prefix —
 the only form `go install github.com/assanoff/cmd/radio@v0.1.0` can resolve:
 
 ```sh

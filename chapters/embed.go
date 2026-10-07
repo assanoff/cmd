@@ -84,9 +84,14 @@ func embed(src, dest, cover, title string, meta []byte) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(metaFile.Name())
+	// Cleanup errors are dropped throughout: the temporary is in the system
+	// temp directory, and a caller told that it could not be unlinked has
+	// nothing to do about it that the operating system will not do later.
+	defer func() { _ = os.Remove(metaFile.Name()) }()
 	if _, err := metaFile.Write(meta); err != nil {
-		metaFile.Close()
+		// The write error is the one worth reporting; a close failure on top
+		// of it would only hide it.
+		_ = metaFile.Close()
 		return err
 	}
 	if err := metaFile.Close(); err != nil {
@@ -150,17 +155,21 @@ func writeInPlace(path, cover, title string, meta []byte) error {
 		return err
 	}
 	tmpName := tmp.Name()
-	tmp.Close()
-	defer os.Remove(tmpName)
+	// Created only to reserve the name — ffmpeg writes the file itself, so
+	// there is nothing buffered for this close to fail to flush.
+	_ = tmp.Close()
+	defer func() { _ = os.Remove(tmpName) }()
 
 	if err := embed(path, tmpName, cover, title, meta); err != nil {
 		return err
 	}
 
 	// Keep the mode the original had: a rename would otherwise leave the file
-	// with the temporary's 0600.
+	// with the temporary's 0600. Best effort on purpose — on a filesystem that
+	// does not carry permissions there is nothing to copy, and refusing to
+	// write the chapters over that would help nobody.
 	if info, err := os.Stat(path); err == nil {
-		os.Chmod(tmpName, info.Mode().Perm())
+		_ = os.Chmod(tmpName, info.Mode().Perm())
 	}
 	return os.Rename(tmpName, path)
 }

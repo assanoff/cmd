@@ -54,9 +54,11 @@ commands:
 `)
 	w := tabwriter.NewWriter(os.Stderr, 0, 0, 2, ' ', 0)
 	for _, c := range commands {
-		fmt.Fprintf(w, "  %s\t%s\n", c.usage, c.short)
+		_, _ = fmt.Fprintf(w, "  %s\t%s\n", c.usage, c.short)
 	}
-	w.Flush()
+	// Writing the usage is the last thing this process does before exiting 2;
+	// a failure to print it leaves nothing that could be done differently.
+	_ = w.Flush()
 	fmt.Fprint(os.Stderr, `
 Run "radio <command> -h" for a command's own flags.
 `)

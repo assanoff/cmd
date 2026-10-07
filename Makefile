@@ -18,6 +18,13 @@ RELEASE := scripts/release.sh
 export GO
 export ORIGIN
 
+# Build tags applied to every Go invocation. Empty by design: a plain
+# `go install github.com/assanoff/cmd/<name>@latest` has to produce the same
+# binary this builds, and a tag that only the Makefile passes would quietly
+# make the two differ. Override on the command line if you ever need one.
+TAGS   ?=
+GOTAGS := $(if $(TAGS),-tags $(TAGS),)
+
 # Every directory with a go.mod is a command and its own module, so the module
 # list is discovered rather than maintained by hand.
 MODULES := $(sort $(patsubst %/go.mod,%,$(wildcard */go.mod)))
@@ -54,30 +61,30 @@ tidy: ## Run go mod tidy
 
 .PHONY: build
 build: ## Build each command's binary into ./bin (gitignored)
-	@for m in $(MODS); do echo ">> build $$m"; (cd $$m && $(GO) build -o ../bin/ .); done
+	@for m in $(MODS); do echo ">> build $$m"; (cd $$m && $(GO) build $(GOTAGS) -o ../bin/ .); done
 
 .PHONY: install
 install: ## go install each command into GOBIN
-	@for m in $(MODS); do echo ">> install $$m"; (cd $$m && $(GO) install .); done
+	@for m in $(MODS); do echo ">> install $$m"; (cd $$m && $(GO) install $(GOTAGS) .); done
 
 .PHONY: vet
 vet: ## go vet
-	@for m in $(MODS); do echo ">> vet $$m"; (cd $$m && $(GO) vet ./...); done
+	@for m in $(MODS); do echo ">> vet $$m"; (cd $$m && $(GO) vet $(GOTAGS) ./...); done
 
 .PHONY: test
 test: ## Run tests (short, race, per-package coverage)
-	@for m in $(MODS); do echo ">> test $$m"; (cd $$m && $(GO) test -race -short -cover ./...); done
+	@for m in $(MODS); do echo ">> test $$m"; (cd $$m && $(GO) test $(GOTAGS) -race -short -cover ./...); done
 
 .PHONY: test-json
 test-json: ## Tests with a pretty pass/fail + coverage summary (tparse)
 	@for m in $(MODS); do echo ">> test $$m"; \
-		(cd $$m && bash -o pipefail -c '$(GO) test -short -race -cover ./... -json | $(GO) run $(TPARSE) -all'); done
+		(cd $$m && bash -o pipefail -c '$(GO) test $(GOTAGS) -short -race -cover ./... -json | $(GO) run $(TPARSE) -all'); done
 
 .PHONY: cover
 cover: ## Write a coverage profile per module and render the HTML
 	@for m in $(MODS); do echo ">> cover $$m"; \
 		(cd $$m && mkdir -p coverdata \
-			&& $(GO) test -short -covermode=atomic -coverprofile=coverdata/coverage.out ./... \
+			&& $(GO) test $(GOTAGS) -short -covermode=atomic -coverprofile=coverdata/coverage.out ./... \
 			&& $(GO) tool cover -func=coverdata/coverage.out | tail -n1 \
 			&& $(GO) tool cover -html=coverdata/coverage.out -o coverdata/coverage.html \
 			&& echo ">> wrote $$m/coverdata/coverage.html"); done

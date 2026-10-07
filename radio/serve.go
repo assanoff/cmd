@@ -40,11 +40,18 @@ func serveCommand() *command {
 			if len(args) == 1 {
 				root = args[0]
 			}
+			// Both settings reach the rest of the program through the
+			// environment. Failing to set one would serve the directory under
+			// a different address than the one printed, so neither is ignored.
 			if *portFlag != "" {
-				os.Setenv("RADIO_PORT", *portFlag)
+				if err := os.Setenv("RADIO_PORT", *portFlag); err != nil {
+					return err
+				}
 			}
 			if *prefix != "" {
-				os.Setenv("RADIO_PREFIX", *prefix)
+				if err := os.Setenv("RADIO_PREFIX", *prefix); err != nil {
+					return err
+				}
 			}
 
 			casts, err := discover(root)
@@ -156,9 +163,11 @@ func handler(dir, mount string, casts []podcast, quiet bool) http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		fmt.Fprintf(w, "radio, serving %s\n\n", dir)
+		// A write error here means the client went away mid-response; the
+		// handler has nowhere to report it and nothing left to do.
+		_, _ = fmt.Fprintf(w, "radio, serving %s\n\n", dir)
 		for _, p := range casts {
-			fmt.Fprintf(w, "%s\n", feedURL(p, mount))
+			_, _ = fmt.Fprintf(w, "%s\n", feedURL(p, mount))
 		}
 	})
 
