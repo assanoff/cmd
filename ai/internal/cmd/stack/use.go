@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/assanoff/cmd/ai/internal/cli"
-	"github.com/assanoff/cmd/ai/internal/core/config"
+	"github.com/assanoff/cmd/ai/internal/config"
 )
 
 type useCommand struct {

@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/assanoff/cmd/ai/internal/chunk"
 	"github.com/assanoff/cmd/ai/internal/cli"
-	"github.com/assanoff/cmd/ai/internal/core/chunk"
-	"github.com/assanoff/cmd/ai/internal/core/llm"
+	"github.com/assanoff/cmd/ai/internal/llm"
 )
 
 // maxReduceRounds is the hard stop on the fold.
@@ -51,6 +51,9 @@ type folder struct {
 //	ai sum -s brief,terms,chapters,facts,tips lecture.srt
 //
 // cost about as much as a single style.
+//
+// material arrives already capped at --ctx-tokens: it is the same for every
+// input in a batch, so it is trimmed once before the run rather than here.
 func (f folder) summarize(ctx context.Context, text string, styles []string, lang string, limit int, material string) (string, error) {
 	folded, err := f.fold(ctx, text, lang, limit)
 	if err != nil {
@@ -59,11 +62,6 @@ func (f folder) summarize(ctx context.Context, text string, styles []string, lan
 	// --no-reduce asked for the per-part compressions, not a summary.
 	if f.cmd.NoReduce {
 		return folded, nil
-	}
-
-	material, err = f.trimContext(ctx, material)
-	if err != nil {
-		return "", err
 	}
 
 	var sections []string

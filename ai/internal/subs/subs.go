@@ -194,6 +194,25 @@ func ParseStamp(s string) (time.Duration, bool) {
 	return total, true
 }
 
+// FormatStamp formats a duration as a cue timing: HH:MM:SS<sep>mmm. SubRip
+// puts a comma before the fraction, WebVTT a period.
+//
+// It lives beside the parser on purpose. hear writes these files and tr and
+// sum read them back, so the two halves of the format have to agree; they
+// agree by being one package.
+func FormatStamp(d time.Duration, sep string) string {
+	if d < 0 {
+		d = 0
+	}
+	return fmt.Sprintf("%02d:%02d:%02d%s%03d",
+		int(d/time.Hour),
+		int(d%time.Hour/time.Minute),
+		int(d%time.Minute/time.Second),
+		sep,
+		int(d%time.Second/time.Millisecond),
+	)
+}
+
 // Stamp formats a duration the way the marker appears in prose.
 func Stamp(d time.Duration) string {
 	if d < 0 {

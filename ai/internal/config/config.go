@@ -47,17 +47,6 @@ func Int(key string, deflt int, warn func(format string, args ...any)) int {
 	return n
 }
 
-// FirstNonEmpty returns the first value that is set. It is the shape every
-// "flag, then config, then default" lookup takes.
-func FirstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
 var (
 	once sync.Once
 	vals map[string]string

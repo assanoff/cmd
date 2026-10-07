@@ -18,7 +18,7 @@ import (
 	"github.com/ardanlabs/kronk/sdk/tools/libs"
 
 	"github.com/assanoff/cmd/ai/internal/cli"
-	"github.com/assanoff/cmd/ai/internal/core/config"
+	"github.com/assanoff/cmd/ai/internal/config"
 )
 
 type statusCommand struct {
@@ -26,8 +26,8 @@ type statusCommand struct {
 }
 
 func (c *statusCommand) Execute(args []string) error {
-	if len(args) > 0 {
-		return cli.Usagef("status takes no arguments")
+	if err := noArgs("status", args); err != nil {
+		return err
 	}
 
 	base := defaults.BaseDir("")
@@ -75,30 +75,18 @@ func printLibs(ctx context.Context) {
 	}
 }
 
-// tag is the shape both library managers report, reduced to what status shows.
-type tag struct {
-	version   string
-	os        string
-	arch      string
-	processor string
-}
-
 // toTags takes List's two results directly. Both library managers alias the
 // same underlying VersionTag, so one converter serves both backends. A listing
 // error is folded into an empty list: status reports what it can see and lets
 // doctor be the one that complains.
-func toTags(tags []libs.VersionTag, err error) []tag {
+func toTags(tags []libs.VersionTag, err error) []libs.VersionTag {
 	if err != nil {
 		return nil
 	}
-	out := make([]tag, 0, len(tags))
-	for _, t := range tags {
-		out = append(out, tag{version: t.Version, os: t.OS, arch: t.Arch, processor: t.Processor})
-	}
-	return out
+	return tags
 }
 
-func printInstalls(w *tabwriter.Writer, name, active string, tags []tag) {
+func printInstalls(w *tabwriter.Writer, name, active string, tags []libs.VersionTag) {
 	if len(tags) == 0 {
 		_, _ = fmt.Fprintf(w, "  %s\tnot installed\t(run ai stack install)\n", name)
 		return
@@ -109,10 +97,10 @@ func printInstalls(w *tabwriter.Writer, name, active string, tags []tag) {
 			label = ""
 		}
 		mark := ""
-		if strings.Contains(active, filepath.Join(t.os, t.arch, t.processor)) {
+		if strings.Contains(active, filepath.Join(t.OS, t.Arch, t.Processor)) {
 			mark = "  <- active"
 		}
-		_, _ = fmt.Fprintf(w, "  %s\t%s\t%s/%s/%s%s\n", label, t.version, t.os, t.arch, t.processor, mark)
+		_, _ = fmt.Fprintf(w, "  %s\t%s\t%s/%s/%s%s\n", label, t.Version, t.OS, t.Arch, t.Processor, mark)
 	}
 }
 
@@ -121,6 +109,11 @@ func printInstalls(w *tabwriter.Writer, name, active string, tags []tag) {
 // rather than at the moment a pipeline needs it.
 func printRoles() error {
 	llama, whisper, err := openStores()
+	if err != nil {
+		return err
+	}
+
+	inst, err := openInstalled(llama, whisper)
 	if err != nil {
 		return err
 	}
@@ -134,12 +127,8 @@ func printRoles() error {
 			_, _ = fmt.Fprintf(w, "  %s\t%s\t(unbound)\n", r.Name, r.Backend)
 			continue
 		}
-		installed, err := roleInstalled(r, llama, whisper)
-		if err != nil {
-			return err
-		}
 		state := "MISSING"
-		if installed {
+		if inst.has(r) {
 			state = "installed"
 		}
 		_, _ = fmt.Fprintf(w, "  %s\t%s\t%s\t%s\n", r.Name, r.Backend, name, state)

@@ -8,10 +8,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/assanoff/cmd/ai/internal/core/asr"
+	"github.com/assanoff/cmd/ai/internal/asr"
+	"github.com/assanoff/cmd/ai/internal/subs"
 )
 
 // The JSON shape is ours, not the SDK's: these field names are what scripts
@@ -85,52 +87,43 @@ func renderJSON(w io.Writer, tr asr.Transcription) error {
 // comma, as SubRip wants. Segments come from one whole-file decode, so the
 // timings need no adjusting.
 func renderSRT(w io.Writer, tr asr.Transcription) error {
-	n := 0
+	var cues []subs.Cue
 	for _, seg := range tr.Segments {
 		text := strings.TrimSpace(seg.Text)
 		if text == "" {
 			continue
 		}
-		n++
-		_, err := fmt.Fprintf(w, "%d\n%s --> %s\n%s\n\n",
-			n, stamp(seg.StartMs, ","), stamp(seg.EndMs, ","), text)
-		if err != nil {
-			return err
-		}
+		cues = append(cues, subs.Cue{
+			Header: []string{
+				strconv.Itoa(len(cues) + 1),
+				timing(seg, ","),
+			},
+			Text: text,
+		})
 	}
-	return nil
+	_, err := io.WriteString(w, subs.Render(nil, cues))
+	return err
 }
 
 func renderVTT(w io.Writer, tr asr.Transcription) error {
-	if _, err := fmt.Fprint(w, "WEBVTT\n\n"); err != nil {
-		return err
-	}
+	var cues []subs.Cue
 	for _, seg := range tr.Segments {
 		text := strings.TrimSpace(seg.Text)
 		if text == "" {
 			continue
 		}
-		_, err := fmt.Fprintf(w, "%s --> %s\n%s\n\n",
-			stamp(seg.StartMs, "."), stamp(seg.EndMs, "."), text)
-		if err != nil {
-			return err
-		}
+		cues = append(cues, subs.Cue{Header: []string{timing(seg, ".")}, Text: text})
 	}
-	return nil
+	_, err := io.WriteString(w, subs.Render([]string{"WEBVTT"}, cues))
+	return err
 }
 
-// stamp formats milliseconds as HH:MM:SS<sep>mmm. SubRip uses a comma before
-// the fraction, WebVTT a period.
+// timing is the "start --> end" line of one cue.
+func timing(seg asr.Segment, sep string) string {
+	return stamp(seg.StartMs, sep) + " --> " + stamp(seg.EndMs, sep)
+}
+
+// stamp formats milliseconds as a cue timestamp.
 func stamp(ms int64, sep string) string {
-	if ms < 0 {
-		ms = 0
-	}
-	d := time.Duration(ms) * time.Millisecond
-	return fmt.Sprintf("%02d:%02d:%02d%s%03d",
-		int(d/time.Hour),
-		int(d%time.Hour/time.Minute),
-		int(d%time.Minute/time.Second),
-		sep,
-		int(d%time.Second/time.Millisecond),
-	)
+	return subs.FormatStamp(time.Duration(ms)*time.Millisecond, sep)
 }

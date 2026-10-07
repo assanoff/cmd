@@ -13,7 +13,7 @@ import (
 	"github.com/ardanlabs/kronk/sdk/tools/libs"
 
 	"github.com/assanoff/cmd/ai/internal/cli"
-	"github.com/assanoff/cmd/ai/internal/core/config"
+	"github.com/assanoff/cmd/ai/internal/config"
 )
 
 type installCommand struct {
@@ -24,8 +24,8 @@ type installCommand struct {
 }
 
 func (c *installCommand) Execute(args []string) error {
-	if len(args) > 0 {
-		return cli.Usagef("install takes no arguments")
+	if err := noArgs("install", args); err != nil {
+		return err
 	}
 	p := printer(c.Quiet)
 
@@ -45,8 +45,8 @@ type updateCommand struct {
 }
 
 func (c *updateCommand) Execute(args []string) error {
-	if len(args) > 0 {
-		return cli.Usagef("update takes no arguments")
+	if err := noArgs("update", args); err != nil {
+		return err
 	}
 	if err := installLibs(c.ctx, printer(c.Quiet)); err != nil {
 		return err
@@ -103,15 +103,16 @@ func syncModels(ctx context.Context, p *cli.Printer) error {
 		return err
 	}
 
+	inst, err := openInstalled(llama, whisper)
+	if err != nil {
+		return err
+	}
+
 	var missing int
 	for _, r := range config.BoundRoles() {
 		name := r.Model()
 
-		installed, err := roleInstalled(r, llama, whisper)
-		if err != nil {
-			return err
-		}
-		if installed {
+		if inst.has(r) {
 			fmt.Printf("%-9s %-42s ok\n", r.Name, name)
 			continue
 		}

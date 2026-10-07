@@ -19,7 +19,7 @@ import (
 	"github.com/ardanlabs/kronk/sdk/tools/models"
 
 	"github.com/assanoff/cmd/ai/internal/cli"
-	"github.com/assanoff/cmd/ai/internal/core/config"
+	"github.com/assanoff/cmd/ai/internal/config"
 )
 
 // Name is how this subcommand labels its own progress.
@@ -75,28 +75,48 @@ func openStores() (*models.Models, *buckymodels.Models, error) {
 	return llama, whisper, nil
 }
 
-// roleInstalled reports whether the model a role names is on disk.
-func roleInstalled(r config.Role, llama *models.Models, whisper *buckymodels.Models) (bool, error) {
-	name := r.Model()
-	if name == "" {
-		return false, nil
-	}
+// installed is the set of models on disk, for each backend.
+//
+// It is built once per command rather than consulted once per role: both
+// lookups behind it enumerate a store holding multi-gigabyte files, and the
+// answer is the same for every role in the table.
+type installed struct {
+	llama   map[string]bool
+	whisper map[string]bool
+}
 
-	if r.Backend == config.BackendWhisper {
-		files, err := whisper.Files()
-		if err != nil {
-			return false, fmt.Errorf("listing whisper models: %w", err)
-		}
-		for _, f := range files {
-			if f.ID == name {
-				return true, nil
-			}
-		}
-		return false, nil
+func openInstalled(llama *models.Models, whisper *buckymodels.Models) (installed, error) {
+	files, err := whisper.Files()
+	if err != nil {
+		return installed{}, fmt.Errorf("listing whisper models: %w", err)
+	}
+	w := make(map[string]bool, len(files))
+	for _, f := range files {
+		w[f.ID] = true
 	}
 
 	downloaded, _ := llama.IndexState()
-	return downloaded[name], nil
+	return installed{llama: downloaded, whisper: w}, nil
+}
+
+// has reports whether the model a role names is on disk.
+func (i installed) has(r config.Role) bool {
+	name := r.Model()
+	if name == "" {
+		return false
+	}
+	if r.Backend == config.BackendWhisper {
+		return i.whisper[name]
+	}
+	return i.llama[name]
+}
+
+// noArgs rejects the stray words a command that takes none was given.
+func noArgs(name string, args []string) error {
+	if len(args) > 0 {
+		return cli.Usagef("%s takes no arguments", name)
+	}
+	return nil
 }
 
 // claimedModels maps a model id to whatever holds it: the roles pointing at it,

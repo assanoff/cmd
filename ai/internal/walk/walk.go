@@ -47,10 +47,10 @@ type Request struct {
 	OutDir  string // -O: a tree of outputs
 	Suffix  string
 
-	// Ext names the output extension for one input, including the dot. It is
-	// only consulted for a batch, and it takes the input path because tr keeps
-	// the input's own extension while the others choose one from -f.
-	Ext func(in string) string
+	// OutExt is the extension each output file gets, including the dot. It is
+	// only consulted for a batch. Empty keeps each input's own extension,
+	// which is what tr needs: translating subtitles has to produce subtitles.
+	OutExt string
 
 	// Report receives notes about inputs that matched nothing. It may be nil.
 	Report func(format string, args ...any)
@@ -163,9 +163,9 @@ func walkDir(root, exts string, recurse bool) ([]source, error) {
 func (r Request) outPath(src source) string {
 	base := strings.TrimSuffix(filepath.Base(src.path), filepath.Ext(src.path))
 
-	var ext string
-	if r.Ext != nil {
-		ext = r.Ext(src.path)
+	ext := r.OutExt
+	if ext == "" {
+		ext = filepath.Ext(src.path)
 	}
 	name := base + r.Suffix + ext
 

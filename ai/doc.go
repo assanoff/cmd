@@ -86,15 +86,15 @@ file arguments as well as precede them.
 The implementation lives under internal/, split so that the parts that talk to
 the SDK are in one place each:
 
-	internal/cli            exit codes, progress, input and output
-	internal/core/llm       the Kronk engine: every text model goes through it
-	internal/core/asr       the Bucky engine: every speech model does
-	internal/core/config    ~/.config/ai/config and the role table
-	internal/core/chunk     token-aware splitting
-	internal/core/subs      SubRip and WebVTT
-	internal/core/walk      arguments to jobs, and where each result goes
-	internal/core/prompt    prompt templates
-	internal/cmd/*          one package per subcommand: flags and control flow
+	internal/cli       exit codes, progress, the batch driver, input and output
+	internal/llm       the Kronk engine: every text model goes through it
+	internal/asr       the Bucky engine: every speech model does
+	internal/config    ~/.config/ai/config and the role table
+	internal/chunk     token-aware splitting
+	internal/subs      SubRip and WebVTT
+	internal/walk      arguments to jobs, and where each result goes
+	internal/prompt    prompt templates and the language table
+	internal/cmd/*     one package per subcommand: flags and control flow
 
 This was five separate commands and five separate modules before, each with its
 own copy of the config reader, the model loader and the directory walker. The

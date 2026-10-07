@@ -4,7 +4,10 @@
 
 package config
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // Role names a job a model does. The config says which model currently does
 // it, so swapping a model is one edited line and every subcommand follows.
@@ -117,12 +120,11 @@ func Resolve(v, deflt string) string {
 }
 
 func LookupRole(name string) (Role, bool) {
-	for _, r := range Roles {
-		if r.Name == name {
-			return r, true
-		}
+	i := slices.IndexFunc(Roles, func(r Role) bool { return r.Name == name })
+	if i < 0 {
+		return Role{}, false
 	}
-	return Role{}, false
+	return Roles[i], true
 }
 
 // RoleNames lists the roles for an error message.

@@ -62,9 +62,9 @@ func OpenOutput(out string) (io.Writer, func() error, error) {
 	return f, f.Close, nil
 }
 
-// SkipExisting honours the default of leaving finished work alone, so
+// skipExisting honours the default of leaving finished work alone, so
 // re-running a batch after an interruption only does what is left.
-func SkipExisting(out string, force bool, p *Printer, in string) (bool, error) {
+func skipExisting(out string, force bool, p *Printer, in string) (bool, error) {
 	if out == "" || force {
 		return false, nil
 	}

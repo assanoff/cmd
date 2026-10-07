@@ -12,12 +12,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/assanoff/cmd/ai/internal/chunk"
 	"github.com/assanoff/cmd/ai/internal/cli"
-	"github.com/assanoff/cmd/ai/internal/core/chunk"
-	"github.com/assanoff/cmd/ai/internal/core/lang"
-	"github.com/assanoff/cmd/ai/internal/core/llm"
-	"github.com/assanoff/cmd/ai/internal/core/prompt"
-	"github.com/assanoff/cmd/ai/internal/core/subs"
+	"github.com/assanoff/cmd/ai/internal/llm"
+	"github.com/assanoff/cmd/ai/internal/prompt"
+	"github.com/assanoff/cmd/ai/internal/subs"
 )
 
 // Prompts live in files, not in string literals: they are edited far more
@@ -38,18 +37,15 @@ type translator struct {
 	to  string
 }
 
-// instruction renders a prompt and names the source language when one was
-// given. Naming it is worth doing: a model told the source is Kazakh stops
-// guessing at Turkish.
+// instruction renders a prompt. From is passed through because naming the
+// source language is worth doing when it is known: a model told the source is
+// Kazakh stops guessing at Turkish. Where that sentence goes, and whether it
+// appears at all, is the prompt file's business rather than this function's.
 func (t translator) instruction(name string) (string, error) {
-	s, err := prompt.Render(prompts, name, t.to)
-	if err != nil {
-		return "", err
-	}
-	if t.cmd.From != "" {
-		s += "\n\nThe source language is " + lang.Name(t.cmd.From) + "."
-	}
-	return s, nil
+	return prompt.Render(prompts, name, struct{ Lang, From string }{
+		Lang: prompt.Name(t.to),
+		From: prompt.Name(t.cmd.From),
+	})
 }
 
 // chat runs one prompt over one piece of text.

@@ -79,12 +79,11 @@ One binary, one module, and the implementation under `internal/`:
 ai/
   main.go                 the parser and the dispatch table
   internal/
-    cli/                  exit codes, progress, input and output
-    core/
-      llm/                the Kronk engine — every text model goes through it
-      asr/                the Bucky engine — every speech model does
-      config/             ~/.config/ai/config and the role table
-      chunk/  subs/  walk/  prompt/  lang/
+    cli/                  exit codes, progress, the batch driver, input and output
+    llm/                  the Kronk engine — every text model goes through it
+    asr/                  the Bucky engine — every speech model does
+    config/               ~/.config/ai/config and the role table
+    chunk/  subs/  walk/  prompt/
     cmd/
       ask/  hear/  sum/  tr/  stack/
 ```
@@ -94,9 +93,9 @@ This was five commands in five modules before (`ai-ask`, `ai-hear`, `ai-sum`,
 model loader and the directory walker. The copies had drifted — the same role
 resolved to different models depending on which command you asked — and a Kronk
 bump meant editing five `go.mod` files that all installed into the same
-`~/.kronk`. The single core is what that was for: `internal/core/llm` is the
-only place this program talks to the SDK, and `internal/core/asr` the only
-place it talks to whisper.
+`~/.kronk`. Sharing one set of packages is what that was for:
+`internal/llm` is the only place this program runs a text model, and
+`internal/asr` the only place it runs a speech model.
 
 If the old binaries are still on your `PATH` they will keep pulling the shared
 `~/.kronk` bundle back to whatever SDK they were built against. `ai stack

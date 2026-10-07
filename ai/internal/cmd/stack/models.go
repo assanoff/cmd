@@ -15,7 +15,7 @@ import (
 	"github.com/ardanlabs/kronk/sdk/applog"
 
 	"github.com/assanoff/cmd/ai/internal/cli"
-	"github.com/assanoff/cmd/ai/internal/core/config"
+	"github.com/assanoff/cmd/ai/internal/config"
 )
 
 // modelsCommand lists installed models when given no subcommand of its own.
@@ -51,8 +51,8 @@ type modelsSyncCommand struct {
 }
 
 func (c *modelsSyncCommand) Execute(args []string) error {
-	if len(args) > 0 {
-		return cli.Usagef("sync takes no arguments")
+	if err := noArgs("sync", args); err != nil {
+		return err
 	}
 	return syncModels(c.ctx, printer(c.Quiet))
 }
@@ -66,8 +66,8 @@ type modelsGCCommand struct {
 }
 
 func (c *modelsGCCommand) Execute(args []string) error {
-	if len(args) > 0 {
-		return cli.Usagef("gc takes no arguments")
+	if err := noArgs("gc", args); err != nil {
+		return err
 	}
 	return gcModels(c.ctx, printer(c.Quiet), c.Yes, c.DryRun)
 }

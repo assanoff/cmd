@@ -10,14 +10,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path/filepath"
 	"strings"
 
 	"github.com/assanoff/cmd/ai/internal/cli"
-	"github.com/assanoff/cmd/ai/internal/core/config"
-	"github.com/assanoff/cmd/ai/internal/core/llm"
-	"github.com/assanoff/cmd/ai/internal/core/subs"
-	"github.com/assanoff/cmd/ai/internal/core/walk"
+	"github.com/assanoff/cmd/ai/internal/config"
+	"github.com/assanoff/cmd/ai/internal/llm"
+	"github.com/assanoff/cmd/ai/internal/subs"
+	"github.com/assanoff/cmd/ai/internal/walk"
 )
 
 // Name is how this subcommand labels its own progress.
@@ -91,7 +90,7 @@ func (c *Command) Execute([]string) error {
 		suffix = "-" + to
 	}
 
-	jobs, err := walk.Jobs(walk.Request{
+	jobs, err := cli.Jobs(walk.Request{
 		Args:    c.Args.Files,
 		Recurse: c.Recurse,
 		Exts:    c.Exts,
@@ -100,18 +99,11 @@ func (c *Command) Execute([]string) error {
 		Suffix:  suffix,
 		// Unlike the other subcommands tr chooses no extension of its own:
 		// translating subtitles has to produce subtitles and translating
-		// markdown has to stay markdown.
-		Ext:    filepath.Ext,
+		// markdown has to stay markdown. An empty OutExt keeps each input's.
+		OutExt: "",
 		Report: p.Printf,
 	})
-	switch {
-	case errors.Is(err, walk.ErrTerminalInput):
-		return cli.Usagef("%v", err)
-	case err != nil:
-		var be *walk.BatchError
-		if errors.As(err, &be) {
-			return cli.Usagef("%v", be)
-		}
+	if err != nil {
 		return err
 	}
 	if len(jobs) == 0 {
@@ -125,6 +117,16 @@ func (c *Command) Execute([]string) error {
 		return nil
 	}
 
+	// Before the model is loaded, not inside the run loop: a resumed batch
+	// with nothing left to do should not pay for the load to discover that.
+	jobs, err = cli.Pending(jobs, c.Force, p)
+	if err != nil {
+		return err
+	}
+	if len(jobs) == 0 {
+		return nil
+	}
+
 	eng, err := llm.New(c.ctx, model, p.Logger(), p)
 	if err != nil {
 		return err
@@ -133,31 +135,9 @@ func (c *Command) Execute([]string) error {
 
 	t := translator{cmd: c, eng: eng, p: p, to: to}
 
-	var failed bool
-	for _, j := range jobs {
-		skip, err := cli.SkipExisting(j.Out, c.Force, p, j.In)
-		if err != nil {
-			return err
-		}
-		if skip {
-			continue
-		}
-		if err := t.one(c.ctx, j, limit); err != nil {
-			if c.ctx.Err() != nil {
-				return err
-			}
-			p.Printf("%s: %v", j.In, err)
-			failed = true
-			continue
-		}
-		if j.Out != "" {
-			fmt.Println(j.Out)
-		}
-	}
-	if failed {
-		return errors.New("one or more inputs failed")
-	}
-	return nil
+	return cli.Each(c.ctx, p, jobs, func(j walk.Job) error {
+		return t.one(c.ctx, j, limit)
+	})
 }
 
 // one translates a single input.
@@ -229,13 +209,6 @@ func (c *Command) describe(jobs []walk.Job, model, to string) {
 	} else {
 		fmt.Printf("from   %s\n", c.From)
 	}
-	for _, j := range jobs {
-		out := j.Out
-		if out == "" {
-			out = "(standard output)"
-		}
-		fmt.Printf("%s -> %s\n", cli.DescribeInput(j.In), out)
-	}
 	fmt.Printf("timing %v\n", c.KeepFormat)
-	fmt.Printf("%d input(s)\n", len(jobs))
+	cli.PrintPlan(jobs)
 }

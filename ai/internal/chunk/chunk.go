@@ -134,24 +134,18 @@ func splitOversized(ctx context.Context, tk Tokenizer, para string, limit int) (
 }
 
 // paragraphs splits on blank lines and drops empty results.
+//
+// Runs of more than one blank line need no collapsing first: a longer run
+// only yields blocks that are empty or whitespace, and those are dropped
+// here anyway.
 func paragraphs(text string) []string {
 	var out []string
-	for _, block := range strings.Split(normalizeBlankLines(text), "\n\n") {
+	for _, block := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n\n") {
 		if block = strings.TrimSpace(block); block != "" {
 			out = append(out, block)
 		}
 	}
 	return out
-}
-
-// normalizeBlankLines collapses runs of blank lines to exactly one, so
-// splitting on "\n\n" yields no empty blocks.
-func normalizeBlankLines(text string) string {
-	text = strings.ReplaceAll(text, "\r\n", "\n")
-	for strings.Contains(text, "\n\n\n") {
-		text = strings.ReplaceAll(text, "\n\n\n", "\n\n")
-	}
-	return text
 }
 
 // sentences splits on terminal punctuation. It is deliberately simple: the

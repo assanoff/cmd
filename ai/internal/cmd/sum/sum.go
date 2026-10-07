@@ -7,6 +7,7 @@ package sum
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -17,10 +18,10 @@ import (
 	"unicode/utf8"
 
 	"github.com/assanoff/cmd/ai/internal/cli"
-	"github.com/assanoff/cmd/ai/internal/core/config"
-	"github.com/assanoff/cmd/ai/internal/core/llm"
-	"github.com/assanoff/cmd/ai/internal/core/subs"
-	"github.com/assanoff/cmd/ai/internal/core/walk"
+	"github.com/assanoff/cmd/ai/internal/config"
+	"github.com/assanoff/cmd/ai/internal/llm"
+	"github.com/assanoff/cmd/ai/internal/subs"
+	"github.com/assanoff/cmd/ai/internal/walk"
 )
 
 // Name is how this subcommand labels its own progress.
@@ -99,24 +100,17 @@ func (c *Command) Execute([]string) error {
 		return cli.Usagef("--map-tokens %d is too small to summarize anything; want 256 or more", limit)
 	}
 
-	jobs, err := walk.Jobs(walk.Request{
+	jobs, err := cli.Jobs(walk.Request{
 		Args:    c.Args.Files,
 		Recurse: c.Recurse,
 		Exts:    c.Exts,
 		Out:     c.Out,
 		OutDir:  c.OutDir,
 		Suffix:  c.Suffix,
-		Ext:     func(string) string { return formatExt(c.Format) },
+		OutExt:  cli.FormatExt(c.Format),
 		Report:  p.Printf,
 	})
-	switch {
-	case errors.Is(err, walk.ErrTerminalInput):
-		return cli.Usagef("%v", err)
-	case err != nil:
-		var be *walk.BatchError
-		if errors.As(err, &be) {
-			return cli.Usagef("%v", be)
-		}
+	if err != nil {
 		return err
 	}
 	if len(jobs) == 0 {
@@ -125,7 +119,7 @@ func (c *Command) Execute([]string) error {
 	}
 
 	model := config.Resolve(c.Model, config.RoleSmart)
-	lang := config.FirstNonEmpty(c.Lang, config.Value("AI_OUT_LANG"), defaultOutLang)
+	lang := cmp.Or(c.Lang, config.Value("AI_OUT_LANG"), defaultOutLang)
 	if c.DryRun {
 		c.describe(jobs, model, styles, lang, limit)
 		return nil
@@ -138,6 +132,16 @@ func (c *Command) Execute([]string) error {
 		return err
 	}
 
+	// Before the model is loaded, not inside the run loop: a resumed batch
+	// with nothing left to do should not pay for the load to discover that.
+	jobs, err = cli.Pending(jobs, c.Force, p)
+	if err != nil {
+		return err
+	}
+	if len(jobs) == 0 {
+		return nil
+	}
+
 	eng, err := llm.New(c.ctx, model, p.Logger(), p)
 	if err != nil {
 		return err
@@ -146,31 +150,16 @@ func (c *Command) Execute([]string) error {
 
 	f := folder{cmd: c, eng: eng, p: p}
 
-	var failed bool
-	for _, j := range jobs {
-		skip, err := cli.SkipExisting(j.Out, c.Force, p, j.In)
-		if err != nil {
-			return err
-		}
-		if skip {
-			continue
-		}
-		if err := c.one(f, j, styles, lang, limit, material); err != nil {
-			if c.ctx.Err() != nil {
-				return err
-			}
-			p.Printf("%s: %v", j.In, err)
-			failed = true
-			continue
-		}
-		if j.Out != "" {
-			fmt.Println(j.Out)
-		}
+	// The material is the same for every input, so it is measured and cut
+	// once rather than once per file.
+	material, err = f.trimContext(c.ctx, material)
+	if err != nil {
+		return err
 	}
-	if failed {
-		return errors.New("one or more inputs failed")
-	}
-	return nil
+
+	return cli.Each(c.ctx, p, jobs, func(j walk.Job) error {
+		return c.one(f, j, styles, lang, limit, material)
+	})
 }
 
 // one summarizes a single input.
@@ -244,23 +233,17 @@ func (c *Command) readContext(p *cli.Printer) (string, error) {
 		if !utf8.Valid(b) || bytes.IndexByte(b, 0) >= 0 {
 			return "", cli.Usagef("-c %s is not text; convert it first (ai-read %s)", path, filepath.Base(path))
 		}
-		if strings.TrimSpace(string(b)) == "" {
+		text := strings.TrimSpace(string(b))
+		if text == "" {
 			p.Printf("-c %s is empty, ignoring", path)
 			continue
 		}
 		if sb.Len() > 0 {
 			sb.WriteString("\n\n")
 		}
-		fmt.Fprintf(&sb, "--- %s ---\n%s", filepath.Base(path), strings.TrimSpace(string(b)))
+		fmt.Fprintf(&sb, "--- %s ---\n%s", filepath.Base(path), text)
 	}
 	return sb.String(), nil
-}
-
-func formatExt(format string) string {
-	if format == "md" {
-		return ".md"
-	}
-	return ".txt"
 }
 
 // describe prints what a run would do. This is the payload of -n, so it goes
@@ -276,12 +259,5 @@ func (c *Command) describe(jobs []walk.Job, model string, styles []string, lang 
 	for _, path := range c.Ctx {
 		fmt.Printf("context    %s\n", path)
 	}
-	for _, j := range jobs {
-		out := j.Out
-		if out == "" {
-			out = "(standard output)"
-		}
-		fmt.Printf("%s -> %s\n", cli.DescribeInput(j.In), out)
-	}
-	fmt.Printf("%d input(s)\n", len(jobs))
+	cli.PrintPlan(jobs)
 }

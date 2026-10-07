@@ -7,11 +7,11 @@ package sum
 import (
 	"embed"
 	"io/fs"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/assanoff/cmd/ai/internal/cli"
-	"github.com/assanoff/cmd/ai/internal/core/prompt"
+	"github.com/assanoff/cmd/ai/internal/prompt"
 )
 
 // Prompts live in files, not in string literals: they are edited far more
@@ -26,7 +26,7 @@ var prompts, _ = fs.Sub(promptFS, "prompts")
 
 // render fills in one prompt template for the given output language.
 func render(name, lang string) (string, error) {
-	return prompt.Render(prompts, name, lang)
+	return prompt.Render(prompts, name, struct{ Lang string }{Lang: prompt.Name(lang)})
 }
 
 // styles are the summary shapes sum knows, in the order they read best as
@@ -49,18 +49,11 @@ var sectionTitles = map[string]map[string]string{
 }
 
 func styleList() string {
-	s := append([]string(nil), styles...)
-	sort.Strings(s)
-	return strings.Join(s, ", ")
+	return strings.Join(slices.Sorted(slices.Values(styles)), ", ")
 }
 
 func knownStyle(name string) bool {
-	for _, s := range styles {
-		if s == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(styles, name)
 }
 
 // parseStyles reads the -s value. One name is the ordinary case; a comma-

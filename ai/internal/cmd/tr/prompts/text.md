@@ -12,3 +12,6 @@ shifted marker points at the wrong minute.
 
 Return only the translation — no preamble, no notes, no explanation of what you
 did.
+{{if .From}}
+The source language is {{.From}}.
+{{end}}

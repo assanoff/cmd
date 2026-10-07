@@ -33,24 +33,19 @@ type (
 	Segment       = bmodel.Segment
 )
 
-// Reporter takes the engine's own notes. See llm.Reporter.
-type Reporter interface {
-	Printf(format string, args ...any)
-}
-
 // Engine owns the loaded whisper model. One engine serves every job in a run,
 // which is the reason batching lives in the command rather than in a shell
 // loop: a loop would pay the model load per file.
 type Engine struct {
 	b      *bucky.Bucky
 	name   string
-	report Reporter
+	report *cli.Printer
 }
 
 // New installs whatever is missing and loads the model. The SDK picks a
 // whisper.cpp bundle for this machine, downloads it and the model into
 // ~/.kronk if they are not there yet, and reports progress through log.
-func New(ctx context.Context, name string, log bucky.Logger, report Reporter) (*Engine, error) {
+func New(ctx context.Context, name string, log bucky.Logger, report *cli.Printer) (*Engine, error) {
 	lib, err := buckylibs.New(buckylibs.WithDetect(ctx, log))
 	if err != nil {
 		return nil, cli.NotSetupf("selecting whisper libraries: %w", err)
@@ -89,9 +84,6 @@ func New(ctx context.Context, name string, log bucky.Logger, report Reporter) (*
 
 	return &Engine{b: b, name: name, report: report}, nil
 }
-
-// Name is the model this engine loaded.
-func (e *Engine) Name() string { return e.name }
 
 // Close unloads the model. Failing to unload is worth reporting but never
 // worth failing the run over: the transcript is already written.

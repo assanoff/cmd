@@ -6,15 +6,15 @@
 package hear
 
 import (
+	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/assanoff/cmd/ai/internal/asr"
 	"github.com/assanoff/cmd/ai/internal/cli"
-	"github.com/assanoff/cmd/ai/internal/core/asr"
-	"github.com/assanoff/cmd/ai/internal/core/config"
-	"github.com/assanoff/cmd/ai/internal/core/walk"
+	"github.com/assanoff/cmd/ai/internal/config"
+	"github.com/assanoff/cmd/ai/internal/walk"
 )
 
 // Name is how this subcommand labels its own progress.
@@ -67,24 +67,17 @@ func (c *Command) Execute([]string) error {
 
 	p := cli.NewPrinter(Name, c.Quiet)
 
-	jobs, err := walk.Jobs(walk.Request{
+	jobs, err := cli.Jobs(walk.Request{
 		Args:    c.Args.Files,
 		Recurse: c.Recurse,
 		Exts:    c.Exts,
 		Out:     c.Out,
 		OutDir:  c.OutDir,
 		Suffix:  c.Suffix,
-		Ext:     func(string) string { return formatExt(c.Format) },
+		OutExt:  cli.FormatExt(c.Format),
 		Report:  p.Printf,
 	})
-	switch {
-	case errors.Is(err, walk.ErrTerminalInput):
-		return cli.Usagef("%v", err)
-	case err != nil:
-		var be *walk.BatchError
-		if errors.As(err, &be) {
-			return cli.Usagef("%v", be)
-		}
+	if err != nil {
 		return err
 	}
 	if len(jobs) == 0 {
@@ -98,37 +91,25 @@ func (c *Command) Execute([]string) error {
 		return nil
 	}
 
+	// Before the model is loaded, not inside the run loop: a resumed batch
+	// with nothing left to do should not pay for the load to discover that.
+	jobs, err = cli.Pending(jobs, c.Force, p)
+	if err != nil {
+		return err
+	}
+	if len(jobs) == 0 {
+		return nil
+	}
+
 	eng, err := asr.New(c.ctx, model, p.Logger(), p)
 	if err != nil {
 		return err
 	}
 	defer eng.Close()
 
-	var failed bool
-	for _, j := range jobs {
-		skip, err := cli.SkipExisting(j.Out, c.Force, p, j.In)
-		if err != nil {
-			return err
-		}
-		if skip {
-			continue
-		}
-		if err := c.one(eng, p, j); err != nil {
-			if c.ctx.Err() != nil {
-				return err
-			}
-			p.Printf("%s: %v", j.In, err)
-			failed = true
-			continue
-		}
-		if j.Out != "" {
-			fmt.Println(j.Out)
-		}
-	}
-	if failed {
-		return errors.New("one or more inputs failed")
-	}
-	return nil
+	return cli.Each(c.ctx, p, jobs, func(j walk.Job) error {
+		return c.one(eng, p, j)
+	})
 }
 
 // one transcribes a single input.
@@ -161,7 +142,7 @@ func (c *Command) one(eng *asr.Engine, p *cli.Printer, j walk.Job) error {
 
 func (c *Command) options(p *cli.Printer) asr.Options {
 	o := asr.Options{
-		Language:  config.FirstNonEmpty(c.Lang, config.Value("AI_LANG")),
+		Language:  cmp.Or(c.Lang, config.Value("AI_LANG")),
 		Prompt:    c.Prompt,
 		Translate: c.Xlate,
 		Words:     c.Words,
@@ -180,30 +161,10 @@ func (c *Command) options(p *cli.Printer) asr.Options {
 	return o
 }
 
-func formatExt(format string) string {
-	switch format {
-	case "json":
-		return ".json"
-	case "srt":
-		return ".srt"
-	case "vtt":
-		return ".vtt"
-	default:
-		return ".txt"
-	}
-}
-
 // describe prints what a run would do. This is the payload of -n, so it goes
 // to standard output.
 func (c *Command) describe(jobs []walk.Job, model string) {
 	fmt.Printf("model  %s\n", model)
 	fmt.Printf("format %s\n", c.Format)
-	for _, j := range jobs {
-		out := j.Out
-		if out == "" {
-			out = "(standard output)"
-		}
-		fmt.Printf("%s -> %s\n", cli.DescribeInput(j.In), out)
-	}
-	fmt.Printf("%d input(s)\n", len(jobs))
+	cli.PrintPlan(jobs)
 }

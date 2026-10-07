@@ -7,3 +7,6 @@ makes little sense on its own — these are subtitle cues and each one has to
 stay in its own place.
 
 Keep names, code, and numbers exactly as they are.
+{{if .From}}
+The source language is {{.From}}.
+{{end}}

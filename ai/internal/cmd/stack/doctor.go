@@ -14,7 +14,7 @@ import (
 	"github.com/ardanlabs/kronk/sdk/tools/libs"
 
 	"github.com/assanoff/cmd/ai/internal/cli"
-	"github.com/assanoff/cmd/ai/internal/core/config"
+	"github.com/assanoff/cmd/ai/internal/config"
 )
 
 // legacy names the commands this one replaced. They are checked for because
@@ -29,8 +29,8 @@ type doctorCommand struct {
 }
 
 func (c *doctorCommand) Execute(args []string) error {
-	if len(args) > 0 {
-		return cli.Usagef("doctor takes no arguments")
+	if err := noArgs("doctor", args); err != nil {
+		return err
 	}
 
 	var r report
@@ -64,6 +64,8 @@ type report struct {
 	problems int
 }
 
+// ok and warn ignore the receiver: a finding that is not a problem changes
+// nothing but the terminal. Only bad counts.
 func (r *report) ok(format string, args ...any) {
 	fmt.Printf("  ok    %s\n", fmt.Sprintf(format, args...))
 }
@@ -129,7 +131,7 @@ func checkLibs(ctx context.Context, r *report) {
 	} else if tags := toTags(lib.List()); len(tags) == 0 {
 		r.bad("llama.cpp: no bundle installed (run ai stack install)")
 	} else {
-		r.ok("llama.cpp %s at %s", tags[0].version, lib.LibsPath())
+		r.ok("llama.cpp %s at %s", tags[0].Version, lib.LibsPath())
 	}
 
 	if blib, err := buckylibs.New(buckylibs.WithDetect(ctx, cli.Discard)); err != nil {
@@ -137,7 +139,7 @@ func checkLibs(ctx context.Context, r *report) {
 	} else if tags := toTags(blib.List()); len(tags) == 0 {
 		r.bad("whisper.cpp: no bundle installed (run ai stack install)")
 	} else {
-		r.ok("whisper.cpp %s at %s", tags[0].version, blib.LibsPath())
+		r.ok("whisper.cpp %s at %s", tags[0].Version, blib.LibsPath())
 	}
 }
 
@@ -171,15 +173,17 @@ func checkModels(r *report) {
 		return
 	}
 
+	inst, err := openInstalled(llama, whisper)
+	if err != nil {
+		r.bad("%v", err)
+		return
+	}
+
 	for _, role := range bound {
-		installed, err := roleInstalled(role, llama, whisper)
-		switch {
-		case err != nil:
-			r.bad("role %s: %v", role.Name, err)
-		case installed:
+		if inst.has(role) {
 			r.ok("role %s -> %s", role.Name, role.Model())
-		default:
-			r.bad("role %s -> %s not installed (run ai stack models sync)", role.Name, role.Model())
+			continue
 		}
+		r.bad("role %s -> %s not installed (run ai stack models sync)", role.Name, role.Model())
 	}
 }

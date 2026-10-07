@@ -7,7 +7,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 )
@@ -21,12 +20,11 @@ import (
 type Printer struct {
 	prefix string
 	quiet  bool
-	w      io.Writer
 }
 
 // NewPrinter returns a printer labelled with name, such as "ai sum".
 func NewPrinter(name string, quiet bool) *Printer {
-	return &Printer{prefix: name + ": ", quiet: quiet, w: os.Stderr}
+	return &Printer{prefix: name + ": ", quiet: quiet}
 }
 
 // Quiet reports whether progress is suppressed. Callers that would do real
@@ -43,7 +41,7 @@ func (p *Printer) Printf(format string, args ...any) {
 	if p.quiet {
 		return
 	}
-	_, _ = fmt.Fprintf(p.w, p.prefix+format+"\n", args...)
+	_, _ = fmt.Fprintf(os.Stderr, p.prefix+format+"\n", args...)
 }
 
 // Open writes a labelled line without ending it, so raw text can follow. It is
@@ -53,7 +51,7 @@ func (p *Printer) Open(format string, args ...any) {
 	if p.quiet {
 		return
 	}
-	_, _ = fmt.Fprintf(p.w, p.prefix+format, args...)
+	_, _ = fmt.Fprintf(os.Stderr, p.prefix+format, args...)
 }
 
 // Raw writes text with no label and no newline.
@@ -61,7 +59,7 @@ func (p *Printer) Raw(s string) {
 	if p.quiet {
 		return
 	}
-	_, _ = fmt.Fprint(p.w, s)
+	_, _ = fmt.Fprint(os.Stderr, s)
 }
 
 // Close ends a line opened by Open.
@@ -69,7 +67,7 @@ func (p *Printer) Close() {
 	if p.quiet {
 		return
 	}
-	_, _ = fmt.Fprintln(p.w)
+	_, _ = fmt.Fprintln(os.Stderr)
 }
 
 // Logger adapts the printer to what the Kronk and Bucky SDKs want for their

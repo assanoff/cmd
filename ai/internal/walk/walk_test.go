@@ -11,10 +11,6 @@ import (
 	"testing"
 )
 
-// txt is the Ext function most subcommands pass: one extension, whatever the
-// input was called.
-func txt(string) string { return ".txt" }
-
 // tree writes a set of files under a fresh temp directory and returns its path.
 func tree(t *testing.T, names ...string) string {
 	t.Helper()
@@ -36,7 +32,7 @@ func tree(t *testing.T, names ...string) string {
 func TestOneFileGoesToStdout(t *testing.T) {
 	root := tree(t, "a.txt")
 
-	jobs, err := Jobs(Request{Args: []string{filepath.Join(root, "a.txt")}, Exts: "txt", Ext: txt})
+	jobs, err := Jobs(Request{Args: []string{filepath.Join(root, "a.txt")}, Exts: "txt", OutExt: ".txt"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +50,7 @@ func TestOneFileWithOutFlag(t *testing.T) {
 	jobs, err := Jobs(Request{
 		Args: []string{filepath.Join(root, "a.txt")},
 		Out:  filepath.Join(root, "answer.md"),
-		Exts: "txt", Ext: txt,
+		Exts: "txt", OutExt: ".txt",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -71,7 +67,7 @@ func TestOutFlagRejectsABatch(t *testing.T) {
 	_, err := Jobs(Request{
 		Args: []string{filepath.Join(root, "a.txt"), filepath.Join(root, "b.txt")},
 		Out:  filepath.Join(root, "answer.txt"),
-		Exts: "txt", Ext: txt,
+		Exts: "txt", OutExt: ".txt",
 	})
 
 	var be *BatchError
@@ -90,7 +86,7 @@ func TestStdinCannotJoinABatch(t *testing.T) {
 	_, err := Jobs(Request{
 		Args:   []string{"-", filepath.Join(root, "a.txt")},
 		OutDir: t.TempDir(),
-		Exts:   "txt", Ext: txt,
+		Exts:   "txt", OutExt: ".txt",
 	})
 
 	var be *BatchError
@@ -104,7 +100,7 @@ func TestStdinCannotJoinABatch(t *testing.T) {
 func TestDirectoryIsShallowByDefault(t *testing.T) {
 	root := tree(t, "a.txt", "b.txt", "deep/c.txt", "skip.bin")
 
-	jobs, err := Jobs(Request{Args: []string{root}, Exts: "txt", Ext: txt, OutDir: t.TempDir()})
+	jobs, err := Jobs(Request{Args: []string{root}, Exts: "txt", OutExt: ".txt", OutDir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +120,7 @@ func TestDirectoryIsShallowByDefault(t *testing.T) {
 func TestRecurseDescends(t *testing.T) {
 	root := tree(t, "a.txt", "deep/c.txt")
 
-	jobs, err := Jobs(Request{Args: []string{root}, Recurse: true, Exts: "txt", Ext: txt, OutDir: t.TempDir()})
+	jobs, err := Jobs(Request{Args: []string{root}, Recurse: true, Exts: "txt", OutExt: ".txt", OutDir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +137,7 @@ func TestOutDirPreservesLayout(t *testing.T) {
 
 	jobs, err := Jobs(Request{
 		Args: []string{root}, Recurse: true, OutDir: out,
-		Exts: "txt", Ext: txt, Suffix: "-sum",
+		Exts: "txt", OutExt: ".txt", Suffix: "-sum",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -160,7 +156,7 @@ func TestOutDirPreservesLayout(t *testing.T) {
 func TestBatchWritesBesideTheSource(t *testing.T) {
 	root := tree(t, "a.txt", "b.txt")
 
-	jobs, err := Jobs(Request{Args: []string{root}, Exts: "txt", Ext: txt, Suffix: "-sum"})
+	jobs, err := Jobs(Request{Args: []string{root}, Exts: "txt", OutExt: ".txt", Suffix: "-sum"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,12 +169,11 @@ func TestBatchWritesBesideTheSource(t *testing.T) {
 
 // tr keeps the input's own extension: translating subtitles has to produce
 // subtitles.
-func TestExtFunctionSeesTheInput(t *testing.T) {
+func TestEmptyOutExtKeepsTheInputExtension(t *testing.T) {
 	root := tree(t, "a.srt", "b.md")
 
 	jobs, err := Jobs(Request{
 		Args: []string{root}, Exts: "srt,md", Suffix: "-en",
-		Ext: filepath.Ext,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -199,7 +194,7 @@ func TestExtFunctionSeesTheInput(t *testing.T) {
 func TestNamedFileIgnoresExtFilter(t *testing.T) {
 	root := tree(t, "notes.rst")
 
-	jobs, err := Jobs(Request{Args: []string{filepath.Join(root, "notes.rst")}, Exts: "txt", Ext: txt})
+	jobs, err := Jobs(Request{Args: []string{filepath.Join(root, "notes.rst")}, Exts: "txt", OutExt: ".txt"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +210,7 @@ func TestEmptyDirectoryIsReported(t *testing.T) {
 
 	var said bool
 	jobs, err := Jobs(Request{
-		Args: []string{root}, Exts: "txt", Ext: txt,
+		Args: []string{root}, Exts: "txt", OutExt: ".txt",
 		Report: func(string, ...any) { said = true },
 	})
 	if err != nil {
@@ -230,7 +225,7 @@ func TestEmptyDirectoryIsReported(t *testing.T) {
 }
 
 func TestMissingFileIsAnError(t *testing.T) {
-	if _, err := Jobs(Request{Args: []string{filepath.Join(t.TempDir(), "nope.txt")}, Exts: "txt", Ext: txt}); err == nil {
+	if _, err := Jobs(Request{Args: []string{filepath.Join(t.TempDir(), "nope.txt")}, Exts: "txt", OutExt: ".txt"}); err == nil {
 		t.Error("a missing input did not fail")
 	}
 }
@@ -240,7 +235,7 @@ func TestMissingFileIsAnError(t *testing.T) {
 func TestWalkOrderIsLexical(t *testing.T) {
 	root := tree(t, "c.txt", "a.txt", "b.txt")
 
-	jobs, err := Jobs(Request{Args: []string{root}, Exts: "txt", Ext: txt})
+	jobs, err := Jobs(Request{Args: []string{root}, Exts: "txt", OutExt: ".txt"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,7 +250,7 @@ func TestWalkOrderIsLexical(t *testing.T) {
 func TestExtSetToleratesSpacingAndDots(t *testing.T) {
 	root := tree(t, "a.txt", "b.md")
 
-	jobs, err := Jobs(Request{Args: []string{root}, Exts: " .TXT , md ", Ext: txt})
+	jobs, err := Jobs(Request{Args: []string{root}, Exts: " .TXT , md ", OutExt: ".txt"})
 	if err != nil {
 		t.Fatal(err)
 	}

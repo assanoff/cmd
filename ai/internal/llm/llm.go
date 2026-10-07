@@ -2,7 +2,10 @@
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file.
 
-// Package llm is the one place in this program that talks to Kronk.
+// Package llm is the one place in this program that runs a language model.
+//
+// It owns inference only. Installing and inspecting the model stack is package
+// stack's job, and that one talks to the SDK's tools packages directly.
 //
 // ask, sum and tr all run text models, and each used to carry its own copy of
 // the setup dance — pick a llama.cpp bundle, download it, initialize, open the
@@ -26,13 +29,6 @@ import (
 	"github.com/assanoff/cmd/ai/internal/cli"
 )
 
-// Reporter takes the engine's own notes — a step that hit its token cap, a
-// model that would not unload. It is satisfied by cli.Printer, and it is an
-// interface so this package does not depend on a particular one.
-type Reporter interface {
-	Printf(format string, args ...any)
-}
-
 // Engine owns the loaded language model. One engine serves every job in a run,
 // which is the reason batching lives in the commands rather than in a shell
 // loop: a loop would pay the model load per file, and a map-reduce over one
@@ -40,13 +36,13 @@ type Reporter interface {
 type Engine struct {
 	krn    *kronk.Kronk
 	name   string
-	report Reporter
+	report *cli.Printer
 }
 
 // New installs whatever is missing and loads the model. The SDK picks a
 // llama.cpp bundle for this machine, downloads it and the model into ~/.kronk
 // if they are not there yet, and reports progress through log.
-func New(ctx context.Context, name string, log kronk.Logger, report Reporter) (*Engine, error) {
+func New(ctx context.Context, name string, log kronk.Logger, report *cli.Printer) (*Engine, error) {
 	lib, err := libs.New(libs.WithDetect(ctx, log))
 	if err != nil {
 		return nil, cli.NotSetupf("selecting llama.cpp libraries: %w", err)
@@ -84,9 +80,6 @@ func New(ctx context.Context, name string, log kronk.Logger, report Reporter) (*
 
 	return &Engine{krn: krn, name: name, report: report}, nil
 }
-
-// Name is the model this engine loaded.
-func (e *Engine) Name() string { return e.name }
 
 // Close unloads the model. Failing to unload is worth reporting but never
 // worth failing the run over: the answer is already written, which is why this

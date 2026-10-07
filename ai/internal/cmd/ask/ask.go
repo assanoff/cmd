@@ -7,16 +7,14 @@ package ask
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/assanoff/cmd/ai/internal/cli"
-	"github.com/assanoff/cmd/ai/internal/core/config"
-	"github.com/assanoff/cmd/ai/internal/core/llm"
-	"github.com/assanoff/cmd/ai/internal/core/walk"
+	"github.com/assanoff/cmd/ai/internal/config"
+	"github.com/assanoff/cmd/ai/internal/llm"
+	"github.com/assanoff/cmd/ai/internal/walk"
 )
 
 // Name is how this subcommand labels its own progress.
@@ -83,24 +81,17 @@ func (c *Command) Execute([]string) error {
 		return err
 	}
 
-	jobs, err := walk.Jobs(walk.Request{
+	jobs, err := cli.Jobs(walk.Request{
 		Args:    c.Args.Files,
 		Recurse: c.Recurse,
 		Exts:    c.Exts,
 		Out:     c.Out,
 		OutDir:  c.OutDir,
 		Suffix:  c.Suffix,
-		Ext:     func(string) string { return formatExt(c.Format) },
+		OutExt:  cli.FormatExt(c.Format),
 		Report:  p.Printf,
 	})
-	switch {
-	case errors.Is(err, walk.ErrTerminalInput):
-		return cli.Usagef("%v", err)
-	case err != nil:
-		var be *walk.BatchError
-		if errors.As(err, &be) {
-			return cli.Usagef("%v", be)
-		}
+	if err != nil {
 		return err
 	}
 	if len(jobs) == 0 {
@@ -114,38 +105,25 @@ func (c *Command) Execute([]string) error {
 		return nil
 	}
 
+	// Before the model is loaded, not inside the run loop: a resumed batch
+	// with nothing left to do should not pay for the load to discover that.
+	jobs, err = cli.Pending(jobs, c.Force, p)
+	if err != nil {
+		return err
+	}
+	if len(jobs) == 0 {
+		return nil
+	}
+
 	eng, err := llm.New(c.ctx, model, p.Logger(), p)
 	if err != nil {
 		return err
 	}
 	defer eng.Close()
 
-	var failed bool
-	for _, j := range jobs {
-		skip, err := cli.SkipExisting(j.Out, c.Force, p, j.In)
-		if err != nil {
-			return err
-		}
-		if skip {
-			continue
-		}
-		if err := c.one(eng, p, j, prompt); err != nil {
-			// An interrupted run stops; one bad file among many does not.
-			if c.ctx.Err() != nil {
-				return err
-			}
-			p.Printf("%s: %v", j.In, err)
-			failed = true
-			continue
-		}
-		if j.Out != "" {
-			fmt.Println(j.Out)
-		}
-	}
-	if failed {
-		return errors.New("one or more inputs failed")
-	}
-	return nil
+	return cli.Each(c.ctx, p, jobs, func(j walk.Job) error {
+		return c.one(eng, p, j, prompt)
+	})
 }
 
 // one answers for a single input.
@@ -204,18 +182,13 @@ func (c *Command) answer(eng *llm.Engine, p *cli.Printer, w io.Writer, prompt, t
 }
 
 // thinking turns the two flags into the tri-state the engine takes: think,
-// do not think, or leave the model to its own default.
+// do not think, or leave the model to its own default. The two are rejected as
+// mutually exclusive above, so Think alone carries the answer.
 func (c *Command) thinking() *bool {
-	switch {
-	case c.Think:
-		yes := true
-		return &yes
-	case c.NoThink:
-		no := false
-		return &no
-	default:
-		return nil
+	if c.Think || c.NoThink {
+		return &c.Think
 	}
+	return nil
 }
 
 // thinkWriter prints streamed reasoning to standard error, labelling the block
@@ -251,11 +224,11 @@ func (c *Command) instruction() (string, error) {
 	if c.PromptFile == "" {
 		return c.Prompt, nil
 	}
-	b, err := os.ReadFile(c.PromptFile)
+	s, err := cli.ReadText(c.PromptFile)
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(string(b)), nil
+	return strings.TrimSpace(s), nil
 }
 
 // join puts the instruction before the input, which is the order
@@ -275,19 +248,6 @@ func join(prompt, text string) string {
 	}
 }
 
-// formatExt is the extension a batch writes. Text and md differ only here,
-// which matters when the answer is destined for a notes directory.
-func formatExt(format string) string {
-	switch format {
-	case "json":
-		return ".json"
-	case "md":
-		return ".md"
-	default:
-		return ".txt"
-	}
-}
-
 // describe prints what a run would do. This is the payload of -n, so it goes
 // to standard output.
 func (c *Command) describe(jobs []walk.Job, model, prompt string) {
@@ -298,20 +258,13 @@ func (c *Command) describe(jobs []walk.Job, model, prompt string) {
 	} else {
 		fmt.Printf("prompt %s\n", firstLine(prompt))
 	}
-	for _, j := range jobs {
-		out := j.Out
-		if out == "" {
-			out = "(standard output)"
-		}
-		fmt.Printf("%s -> %s\n", cli.DescribeInput(j.In), out)
-	}
-	fmt.Printf("%d input(s)\n", len(jobs))
+	cli.PrintPlan(jobs)
 }
 
 // firstLine keeps the plan readable when the prompt is a paragraph.
 func firstLine(s string) string {
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		return s[:i] + " ..."
+	if head, _, ok := strings.Cut(s, "\n"); ok {
+		return head + " ..."
 	}
 	return s
 }
