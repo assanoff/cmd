@@ -81,7 +81,7 @@ func renderMarkdown(md, root string, link linker) template.HTML {
 	}
 	r.blocks(doc.Blocks)
 	// The parser escapes the text, and the HTML of the Markdown is text now.
-	return template.HTML(markdown.ToHTML(doc)) // #nosec G203
+	return template.HTML(markdown.ToHTML(doc))
 }
 
 // A rewriter makes links of the positions in a document and takes out what

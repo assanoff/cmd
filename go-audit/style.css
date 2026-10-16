@@ -76,6 +76,7 @@ code {
 }
 
 pre {
+	tab-size: 4;
 	margin: 0.5em 0 1em;
 	padding: 8px 12px;
 	border: 1px solid var(--line);
@@ -126,4 +127,68 @@ blockquote {
 
 :target {
 	background: var(--mark);
+}
+
+/* The pages of go-audit web: the path to a page, and a file of a module
+   with the findings of a report under its lines. */
+nav {
+	margin-bottom: 1em;
+	color: var(--muted);
+}
+
+.muted {
+	color: var(--muted);
+}
+
+.warn {
+	padding: 8px 12px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: var(--mark);
+}
+
+table.src {
+	width: 100%;
+	border: none;
+}
+
+table.src td {
+	padding: 0 8px;
+	border: none;
+}
+
+table.src td.n {
+	width: 1%;
+	text-align: right;
+	color: var(--muted);
+	user-select: none;
+}
+
+table.src td.n a {
+	color: inherit;
+}
+
+table.src pre {
+	margin: 0;
+	padding: 0;
+	border: none;
+	background: none;
+	overflow: visible;
+}
+
+tr.finding td:last-child, div.finding {
+	padding: 4px 10px;
+	border-left: 3px solid #cf222e;
+	background: var(--panel);
+	font-size: 13px;
+	white-space: pre-wrap;
+}
+
+div.finding {
+	margin: 0.5em 0;
+}
+
+.who {
+	color: var(--muted);
+	font-weight: 600;
 }

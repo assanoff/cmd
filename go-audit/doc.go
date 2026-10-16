@@ -12,6 +12,7 @@ Usage:
 	go-audit [-c N] [-only a,b] [-skip a,b] [packages]
 	go-audit reports [-n N] [filter]
 	go-audit show [-o file] [report]
+	go-audit web [-a addr] [-n]
 	go-audit config [-init]
 	go-audit version
 
@@ -170,6 +171,31 @@ code or in the text, links to the file when it is under the root of the
 report: into the editor of the config, or to the file itself without one.
 HTML in a report is shown as text, and so is a link anywhere but to the web,
 to mail or within the page, as a report quotes what tools print about code.
+
+# Browsing the store
+
+go-audit web serves the store on localhost:8781, or the address -a gives, and
+opens it in a web browser unless -n says not to; Ctrl-C stops it. It reads
+the store afresh for each page, so a new report is there without a restart:
+
+	/                                     all the reports, newest first
+	/<module>/                            the reports of a module
+	/<module>/<report>                    a report, as go-audit show writes it
+	/src/<module>/<file>?report=<report>  a file of the module
+
+A file:line of a report leads to the page of the file: its lines numbered,
+the line of the finding marked, and the findings of the report in that file
+under their lines, with what found them and the rule. A finding about the
+whole file, or about a line the file no longer has, stands above the code.
+The page warns when the file changed after the report, as its lines may
+have moved, and links to the editor of the config if there is one.
+
+The modules and their roots come from the reports alone, and the store and
+the code are read each through its directory as a root (os.Root), so that a
+page cannot reach a file outside them, not even through a symbolic link.
+The server answers GET only, and only to requests for localhost, 127.0.0.1
+or ::1, so that a web page elsewhere cannot read the store through a name
+of its own that resolves to this machine.
 
 # The store
 

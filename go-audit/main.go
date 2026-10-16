@@ -45,6 +45,7 @@ func init() {
 	commands = []*command{
 		reportsCommand(),
 		showCommand(),
+		webCommand(),
 		configCommand(),
 		versionCommand(),
 	}
