@@ -144,9 +144,9 @@ the rest.
 ## go-audit
 
 `go-audit` runs a set of checks over a Go module — go vet and the analyzers of
-go fix, staticcheck, golangci-lint, gosec, nilaway, deadcode, govulncheck,
-go-licenses, gostyle, gopls check, `go mod tidy -diff` and gofmt — and writes
-one report of them all. It changes nothing in the module. The reports go into
+go fix, staticcheck, golangci-lint, exhaustruct, gosec, nilaway, deadcode,
+govulncheck, go-licenses, gostyle, gopls check, `go mod tidy -diff` and gofmt —
+and writes one report of them all. It changes nothing in the module. The reports go into
 `~/.go-style` (`$GO_STYLE_HOME` if set), filed by module path, beside those of
 the [go-style](https://github.com/assanoff/go-style-skills) Claude Code plugin:
 they can be read from any directory, and no repository grows a directory of
@@ -168,10 +168,11 @@ to `go install`. The exit status is 0 when nothing was found, 1 when something
 was, and 2 when a check could not do its job, such as code that does not build.
 
 The checks are YAML, built into the binary as
-[go-audit.yml](go-audit/go-audit.yml). `go-audit config -init` copies it into
-the store beside [golangci.yml](go-audit/golangci.yml), the standard set of
-golangci-lint, and the copy then replaces the built-in config as a whole: a
-check can be turned off, changed or added. A tool that prints the JSON of
+[go-audit.yml](go-audit/go-audit.yml), beside
+[golangci.yml](go-audit/golangci.yml), the config of golangci-lint for its
+checks. `go-audit config -init` copies both into the store, and a copy then
+replaces the built-in file as a whole: a check can be turned off, changed or
+added. A tool that prints the JSON of
 `go vet -json`, `file:line: message` lines or a diff needs no code, only an
 entry:
 
@@ -185,6 +186,11 @@ checks:
 
 `go-audit config` shows the config in use and what the built-in one has that
 yours lacks, so that the checks a newer go-audit brings are not lost silently.
+
+exhaustruct, which wants every field of a struct literal set, checks only the
+types marked `//exhaustruct:enforce` or named in golangci.yml: a config, say,
+or a type a mapping fills in. For every type it would ask for the fields of
+zero value that the Go style guides leave out.
 
 The reports are Markdown for people and JSON for programs, and three commands
 read them:

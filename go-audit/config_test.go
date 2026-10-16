@@ -32,8 +32,8 @@ func TestBuiltinConfig(t *testing.T) {
 		}
 	}
 	want := []string{
-		"vet", "fix", "staticcheck", "golangci-lint", "golangci-project", "gosec", "nilaway",
-		"deadcode", "govulncheck", "go-licenses", "gostyle", "gopls", "tidy", "gofmt",
+		"vet", "fix", "staticcheck", "golangci-lint", "golangci-project", "exhaustruct", "gosec",
+		"nilaway", "deadcode", "govulncheck", "go-licenses", "gostyle", "gopls", "tidy", "gofmt",
 	}
 	if !slices.Equal(on, want) {
 		t.Errorf("checks that are on: %v, want %v", on, want)
@@ -147,7 +147,7 @@ func TestShowConfig(t *testing.T) {
 	for _, want := range []string{
 		"config:    built-in; go-audit config -init puts a copy in " + store,
 		"editor:    none",
-		"golangci:  none",
+		"golangci:  built-in; go-audit config -init puts a copy in " + store,
 		"  fix               vet-json     go 1.26  go vet -vettool={gotooldir}/fix -json {packages}",
 		"  golangci-project  golangci              golangci-lint run {project-golangci} ",
 		"  capslock          diff         off      capslock",
@@ -178,9 +178,9 @@ func TestShowConfig(t *testing.T) {
 	}
 	for _, want := range []string{
 		"config:    " + filepath.Join(store, configName),
-		"golangci:  " + filepath.Join(store, golangciName),
-		"has checks yours lacks: fix, staticcheck, golangci-lint, golangci-project, gosec, " +
-			"nilaway, deadcode, govulncheck, go-licenses, gostyle, gopls, tidy, shadow, capslock",
+		"golangci:  " + filepath.Join(store, golangciName) + " (the built-in one differs)",
+		"has checks yours lacks: fix, staticcheck, golangci-lint, golangci-project, exhaustruct, " +
+			"gosec, nilaway, deadcode, govulncheck, go-licenses, gostyle, gopls, tidy, shadow, capslock",
 		"describes otherwise: vet (cmd, note)",
 	} {
 		if !strings.Contains(out.String(), want) {

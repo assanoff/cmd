@@ -45,7 +45,7 @@ packages on its own, on all the cores, so the checks share the processor
 while the memory they need adds up. With a cold build cache it loses, as the
 checks build the same dependencies at once, while with -c 1 the first check
 fills the cache for the rest. The wall time and the peak memory of all the
-processes, for the 14 checks of the built-in config over
+processes, for the 14 checks the built-in config had in v0.1.0, over
 github.com/assanoff/cmd/ai on 8 cores and Go 1.27.2:
 
 	cache   -c 1          -c 4           -c 10
@@ -60,9 +60,9 @@ only into the store.
 
 The checks are described in YAML. The built-in config is go-audit.yml in this
 directory; "go-audit config -init" puts a copy of it into the store, beside
-golangci.yml, the standard set of golangci-lint. The go-audit.yml in the
-store then replaces the built-in one as a whole, so that checks can be
-turned off, changed and added. "go-audit config" shows which
+golangci.yml, the config of golangci-lint for its checks, built in as well.
+The go-audit.yml in the store then replaces the built-in one as a whole, so
+that checks can be turned off, changed and added; so does golangci.yml. "go-audit config" shows which
 file is in use, its checks, and the checks of the built-in config that one's
 own lacks or describes otherwise, so that what a newer go-audit brings is not
 lost silently. A check:
@@ -86,7 +86,8 @@ The command may use these substitutions:
 	                    Go that GOTOOLCHAIN picks there
 	{bin:NAME}          the full path of the program NAME
 	{file:NAME}         the file NAME in the module root
-	{golangci-config}   --config=<store>/golangci.yml, or --no-config without it
+	{golangci-config}   --config=<store>/golangci.yml, or without it the built-in
+	                    one, written into the directory of the output
 	{project-golangci}  --config= and the golangci-lint config of the module
 
 {packages} and {files} take an argument of their own each. A substitution
@@ -126,12 +127,22 @@ vet-json also takes an error of an analyzer or a non-zero exit of go vet for a
 failure, and lines anything on stderr with a non-zero exit.
 
 The built-in config runs go vet and the analyzers of go fix, staticcheck,
-golangci-lint twice, gosec, nilaway, deadcode, govulncheck, go-licenses,
-gostyle, gopls check, go mod tidy -diff and gofmt -l, in this order; shadow
-and capslock are there, off. golangci-lint runs once with the standard set,
-the same for every module, which golangci.yml in the store can change, and
-once more as golangci-project with the module's own config, if it has one.
-govulncheck needs the network: offline, -skip govulncheck.
+golangci-lint twice, exhaustruct, gosec, nilaway, deadcode, govulncheck,
+go-licenses, gostyle, gopls check, go mod tidy -diff and gofmt -l, in this
+order; shadow and capslock are there, off. golangci-lint runs once with the
+standard set, the same for every module, and once more as golangci-project
+with the module's own config, if it has one. govulncheck needs the network:
+offline, -skip govulncheck.
+
+exhaustruct checks that a literal of a struct sets all its fields, but only
+for the types marked //exhaustruct:enforce, or those the enforce-patterns of
+golangci.yml name; //exhaustruct:optional on a field lets it be left out.
+Every type, as exhaustruct checks by default, would ask for the fields of
+zero value that the Go style guides leave out. It runs within golangci-lint,
+whose golangci.yml holds its settings, as its own build cannot read the
+packages of Go 1.27 yet. A golangci.yml of one's own from before has none of
+them, and exhaustruct then checks every type; "go-audit config" says when
+that file differs from the built-in one.
 
 # Listing reports
 
@@ -203,7 +214,7 @@ The store is $GO_STYLE_HOME, or .go-style in the home directory. It holds
 plain files and no database:
 
 	go-audit.yml                                one's own config, if any
-	golangci.yml                                the standard set of golangci-lint, if any
+	golangci.yml                                one's own config of golangci-lint, if any
 	reports/<module>/<time>-style-<label>.md    a go-style report, label = guides
 	reports/<module>/<time>-style-<label>.json
 	reports/<module>/<time>-audit.md            a go-audit report
@@ -211,6 +222,7 @@ plain files and no database:
 	reports/<module>/<time>-<kind>.html         the page of go-audit show
 	runs/<module>/<time>-audit/<check>.out      the stdout of a check
 	runs/<module>/<time>-audit/<check>.log      its stderr
+	runs/<module>/<time>-audit/golangci.yml     the built-in one, without one's own
 
 <module> is the module path from go.mod, escaped as in the module cache:
 each capital letter becomes "!" and the lower-case letter, so that Foo and foo

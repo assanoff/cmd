@@ -5,6 +5,8 @@
 package main
 
 import (
+	"bytes"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -34,6 +36,7 @@ func testAudit(t *testing.T, root string) *audit {
 		mod:      goModule{path: "example.com/m", root: root},
 		packages: []string{"./..."},
 		store:    t.TempDir(),
+		logs:     t.TempDir(),
 	}
 }
 
@@ -83,7 +86,11 @@ func TestSubstitutions(t *testing.T) {
 		{[]string{"no-such-tool", "{packages}"}, nil, "not installed: go install example.com/tool@latest"},
 		{[]string{"go", "{file:capslock.json}"}, nil, "no capslock.json"},
 		{[]string{"go", "{file:empty}"}, nil, "no empty"}, // a directory is no file
-		{[]string{"go", "{golangci-config}"}, []string{"go", "--no-config"}, ""},
+		{
+			[]string{"go", "{golangci-config}"},
+			[]string{"go", "--config=" + filepath.Join(a.logs, golangciName)},
+			"",
+		},
 	}
 	for _, tt := range tests {
 		ch := &check{Name: "x", Cmd: tt.cmd, Install: "example.com/tool@latest"}
@@ -107,6 +114,12 @@ func TestSubstitutions(t *testing.T) {
 		if !slices.Equal(argv, tt.want) {
 			t.Errorf("command %q = %q, want %q", tt.cmd, argv, tt.want)
 		}
+	}
+
+	// Without a golangci.yml in the store, the built-in one is in the logs.
+	if data, err := os.ReadFile(filepath.Join(a.logs, golangciName)); err != nil ||
+		!bytes.Equal(data, builtinGolangci) {
+		t.Errorf("the built-in golangci.yml in the logs: %v\n%s", err, data)
 	}
 
 	// Without install, the program is named.

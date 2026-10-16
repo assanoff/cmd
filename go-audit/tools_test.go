@@ -46,6 +46,14 @@ func Sum(b []byte) [16]byte { return md5.Sum(b) }
 // Clean removes a file and drops the error. (golangci-lint: errcheck)
 func Clean() { os.Remove("x") }
 
+// Point is to be made with all its fields. (exhaustruct)
+//
+//exhaustruct:enforce
+type Point struct{ X, Y int }
+
+// Origin leaves Y out of a Point, and n out of a Store, which is not marked.
+func Origin() (Point, *Store) { return Point{X: 0}, &Store{} }
+
 // Deref reads through a pointer that is always nil. (nilaway)
 func Deref() int {
 	var p *int
@@ -166,6 +174,7 @@ func TestToolsFound(t *testing.T) {
 		{"vet", "go", 1, "printf"},
 		{"staticcheck", "staticcheck", 2, "SA5009"},
 		{"golangci-lint", "golangci-lint", 1, "errcheck"},
+		{"exhaustruct", "golangci-lint", 1, "exhaustruct_v5"},
 		{"gosec", "gosec", 1, "G401"},
 		{"nilaway", "nilaway", 1, "nilaway"},
 		{"deadcode", "deadcode", 1, ""},
@@ -210,6 +219,12 @@ func TestToolsFound(t *testing.T) {
 	// golangci-lint gives the line of code.
 	if _, fs := checkOf(t, rep, "golangci-lint"); len(fs) > 0 && fs[0].Source == "" {
 		t.Errorf("a finding of golangci-lint has no line of code: %+v", fs[0])
+	}
+	// exhaustruct runs alone and checks the marked type only: not the Store
+	// left empty, nor the error Clean drops.
+	if _, fs := checkOf(t, rep, "exhaustruct"); installed("golangci-lint") &&
+		(len(fs) != 1 || !strings.Contains(fs[0].Message, "Point is missing field Y")) {
+		t.Errorf("exhaustruct: %+v, want Point missing Y alone", fs)
 	}
 }
 

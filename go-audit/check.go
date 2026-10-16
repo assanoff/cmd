@@ -20,8 +20,8 @@ import (
 	"time"
 )
 
-// golangciName is the file in the store with the standard set of
-// golangci-lint, for {golangci-config}.
+// golangciName is the file of the golangci-lint config of {golangci-config}:
+// one's own in the store, or the built-in one in the output of a run.
 const golangciName = "golangci.yml"
 
 // waitDelay is how long a check may take to stop after an interrupt before
@@ -58,6 +58,7 @@ type audit struct {
 	files     []string
 	filesErr  error
 	filesDone bool
+	golangci  string // the built-in golangci.yml in the logs, once written
 }
 
 // A result is what one check came to.
@@ -165,7 +166,10 @@ func (a *audit) value(ch *check, name, param string) (string, string, error) {
 	case "golangci-config":
 		path := filepath.Join(a.store, golangciName)
 		if _, err := os.Stat(path); err != nil {
-			return "--no-config", "", nil
+			path, err = a.builtinGolangci()
+			if err != nil {
+				return "", "", err
+			}
 		}
 		return "--config=" + path, "", nil
 	case "project-golangci":
@@ -225,6 +229,21 @@ func (a *audit) goFiles() ([]string, error) {
 	slices.Sort(a.files)
 	a.files = slices.Compact(a.files)
 	return a.files, nil
+}
+
+// builtinGolangci writes the built-in golangci.yml beside the output of the
+// checks, for {golangci-config} when the store has none of its own, and
+// returns its path. golangci-lint takes the settings of its linters from a
+// file only, and those of exhaustruct are to be there all the same.
+func (a *audit) builtinGolangci() (string, error) {
+	if a.golangci == "" {
+		path := filepath.Join(a.logs, golangciName)
+		if err := os.WriteFile(path, builtinGolangci, 0o644); err != nil {
+			return "", err
+		}
+		a.golangci = path
+	}
+	return a.golangci, nil
 }
 
 // projectGolangci returns the golangci-lint config the module would run

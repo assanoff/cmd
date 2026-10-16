@@ -287,8 +287,10 @@ func showConfig(w io.Writer, store string) error {
 		return err
 	}
 	golangci := filepath.Join(store, golangciName)
-	if _, err := os.Stat(golangci); err != nil {
-		golangci = "none: golangci-lint runs its standard set with --no-config"
+	if data, err := os.ReadFile(golangci); err != nil {
+		golangci = "built-in; go-audit config -init puts a copy in " + store
+	} else if !bytes.Equal(data, builtinGolangci) {
+		golangci += " (the built-in one differs)"
 	}
 	editor := c.Editor
 	if editor == "" {

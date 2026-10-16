@@ -15,7 +15,7 @@
 #              {gotooldir}         go env GOTOOLDIR: the tools of the module's Go
 #              {bin:NAME}          the full path of the program NAME
 #              {file:NAME}         the file NAME in the module root
-#              {golangci-config}   --config=<store>/golangci.yml, or --no-config
+#              {golangci-config}   --config=<store>/golangci.yml, or the built-in one
 #              {project-golangci}  --config=<the module's golangci-lint config>
 #            {packages} and {files} take a whole argument each. A substitution
 #            with no value (no such program, no such file) skips the check.
@@ -51,8 +51,8 @@ checks:
     install: honnef.co/go/tools/cmd/staticcheck@latest
 
   # The standard set of golangci-lint, the same for every module: the
-  # golangci.yml of the store, or --no-config without it. The limits are
-  # lifted, so that the count is the real one.
+  # golangci.yml of the store, or the built-in one without it. The limits
+  # are lifted, so that the count is the real one.
   - name: golangci-lint
     cmd: [golangci-lint, run, "{golangci-config}", --output.json.path=stdout, --path-mode=abs,
       --show-stats=false, --max-issues-per-linter=0, --max-same-issues=0,
@@ -67,6 +67,18 @@ checks:
       --allow-parallel-runners, "{packages}"]
     format: golangci
     install: github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+
+  # Literals of the types marked //exhaustruct:enforce that leave a field
+  # out; which types, golangci.yml says. exhaustruct runs within
+  # golangci-lint, as its own build cannot read the packages of Go 1.27 yet.
+  - name: exhaustruct
+    cmd: [golangci-lint, run, "{golangci-config}", --enable-only=exhaustruct_v5,
+      --output.json.path=stdout, --path-mode=abs, --show-stats=false,
+      --max-issues-per-linter=0, --max-same-issues=0, --allow-parallel-runners,
+      "{packages}"]
+    format: golangci
+    install: github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+    note: //exhaustruct:optional on a field lets it be left out
 
   - name: gosec
     cmd: [gosec, -fmt=json, "{packages}"]
