@@ -78,7 +78,7 @@ options:
 	_ = w.Flush()
 	fmt.Fprint(os.Stderr, `
 Run "go-audit <command> -h" for a command's own flags and
-"go doc github.com/assanoff/cmd/go-audit" for all of it.
+"go doc github.com/assanoff/cmd/go-audit@latest" for all of it.
 `)
 }
 

@@ -10,6 +10,7 @@ command never drags in another's dependencies.
 | [ai](ai) | Transcribe, prompt, summarize and translate with local models |
 | [radio](radio) | Publish a directory of audio as a podcast feed |
 | [chapters](chapters) | Write a timecoded tracklist into an audio file |
+| [go-audit](go-audit) | Run the Go linters and checkers over a module, keep and browse the reports |
 
 ## Install
 
@@ -17,8 +18,9 @@ command never drags in another's dependencies.
 go install github.com/assanoff/cmd/ai@latest
 ```
 
-Every command documents itself: run it with `-h` for the flags, or read its
-`doc.go`. Go 1.27 or newer is required; `GOTOOLCHAIN=auto` fetches it for you.
+Every command documents itself: run it with `-h` for the flags, read its
+`doc.go`, or `go doc github.com/assanoff/cmd/ai@latest` from anywhere. Go 1.27
+or newer is required; `GOTOOLCHAIN=auto` fetches it for you.
 
 One wrinkle on Windows: `ai` parses its flags with
 [go-flags](https://github.com/jessevdk/go-flags), which there renders its own
@@ -139,6 +141,71 @@ between them.
 `radio <command> -h` and `chapters -h` list the flags; each `doc.go` explains
 the rest.
 
+## go-audit
+
+`go-audit` runs a set of checks over a Go module — go vet and the analyzers of
+go fix, staticcheck, golangci-lint, gosec, nilaway, deadcode, govulncheck,
+go-licenses, gostyle, gopls check, `go mod tidy -diff` and gofmt — and writes
+one report of them all. It changes nothing in the module. The reports go into
+`~/.go-style` (`$GO_STYLE_HOME` if set), filed by module path, beside those of
+the [go-style](https://github.com/assanoff/go-style-skills) Claude Code plugin:
+they can be read from any directory, and no repository grows a directory of
+reports.
+
+```sh
+go install github.com/assanoff/cmd/go-audit@latest
+
+cd ~/code/payments
+go-audit                                       # every check over ./...
+go-audit -only vet,staticcheck ./internal/...  # some of them, over some packages
+go-audit -skip govulncheck                     # offline
+```
+
+It prints a line per check — ok, found, skipped or error, the number of
+findings, the time — and where the report is. The tools are not dependencies of
+go-audit: a check whose program is missing is skipped, and its line says what
+to `go install`. The exit status is 0 when nothing was found, 1 when something
+was, and 2 when a check could not do its job, such as code that does not build.
+
+The checks are YAML, built into the binary as
+[go-audit.yml](go-audit/go-audit.yml). `go-audit config -init` copies it into
+the store beside [golangci.yml](go-audit/golangci.yml), the standard set of
+golangci-lint, and the copy then replaces the built-in config as a whole: a
+check can be turned off, changed or added. A tool that prints the JSON of
+`go vet -json`, `file:line: message` lines or a diff needs no code, only an
+entry:
+
+```yaml
+checks:
+  - name: nilaway
+    cmd: [nilaway, -json, -pretty-print=false, "-include-pkgs={module}", "{packages}"]
+    format: vet-json
+    install: go.uber.org/nilaway/cmd/nilaway@latest
+```
+
+`go-audit config` shows the config in use and what the built-in one has that
+yours lacks, so that the checks a newer go-audit brings are not lost silently.
+
+The reports are Markdown for people and JSON for programs, and three commands
+read them:
+
+```sh
+go-audit reports      # the ten newest of all modules; "." for this module's
+go-audit show         # the newest of this module, as a page in the browser
+go-audit web          # the whole store, on localhost:8781
+```
+
+`show` writes a page of HTML beside the report, with each `file:line` linked
+into the editor the config names, or to the file without one. `web` serves the
+store and reads it afresh for each page: a `file:line` there leads to a page of
+the file, with the findings of the report under their lines and a warning if
+the file changed since. It answers only on localhost and reads nothing outside
+the store and the modules its reports name.
+
+`go doc github.com/assanoff/cmd/go-audit@latest` has the rest: every format,
+the substitutions a command may use, the layout of the store and the fields of
+the JSON.
+
 ## Versioning
 
 Every command carries its own semver line, because they are released
@@ -153,8 +220,8 @@ git tag radio/v0.1.0
 The `Makefile` does the tagging, and checks the version before it does — the
 targets below are thin wrappers over `scripts/release.sh`, which is where the
 version arithmetic and the checks live. Each command reports the version it was
-built from through `-version`, read out of the build info Go stamps into a
-binary installed from a tag.
+built from through `-version` (`go-audit version`), read out of the build info
+Go stamps into a binary installed from a tag.
 
 ```sh
 make versions                       # what every command is at
