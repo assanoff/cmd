@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -187,6 +188,32 @@ func TestLoadReports(t *testing.T) {
 	// A twin of a newer format is not to be trusted at all, not even partly.
 	if last := reports[len(reports)-1]; last.Kind != "" {
 		t.Errorf("an unreadable report kept kind %q from its twin", last.Kind)
+	}
+}
+
+func TestLoadReportsOfOneSecond(t *testing.T) {
+	// Reports of one module in the same second: the last written comes
+	// first, -10 after -9 as well.
+	store := t.TempDir()
+	at := time.Date(2026, 10, 16, 17, 45, 22, 0, time.Local)
+	names := []string{
+		"20261016-174522-audit", "20261016-174522-audit-2", "20261016-174522-audit-9",
+		"20261016-174522-audit-10",
+	}
+	for _, name := range names {
+		addReport(t, store, "example.com/m", name, v1(at, "audit", "example.com/m", "./...", 0, "nothing found"))
+	}
+	reports, err := loadReports(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, r := range reports {
+		got = append(got, r.name())
+	}
+	slices.Reverse(names)
+	if !slices.Equal(got, names) {
+		t.Errorf("reports of one second in the order %q, want %q", got, names)
 	}
 }
 

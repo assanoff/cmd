@@ -1,0 +1,69 @@
+{
+	"Golang errors": {
+		"$ROOT/a.go": [
+			{
+				"line": 5,
+				"column": 2,
+				"error": "could not import crypto/md5 (reading /elsewhere/Library/Caches/go-build/49/498fb2594f5cc5a2ad972a5d05af809e3332753e6fba6866b55fc83e25734e6e-d: internal error in importing \"crypto/md5\" (cannot decode \"crypto/md5\", export data version 5 is greater than maximum supported version 4); please report an issue)"
+			},
+			{
+				"line": 6,
+				"column": 2,
+				"error": "could not import fmt (reading /elsewhere/Library/Caches/go-build/e8/e803f1b8708bd7b065a0637e3df04f9d64eec2707cc1478bc327bde3b5512a2f-d: internal error in importing \"fmt\" (cannot decode \"fmt\", export data version 5 is greater than maximum supported version 4); please report an issue)"
+			},
+			{
+				"line": 7,
+				"column": 2,
+				"error": "could not import os (reading /elsewhere/Library/Caches/go-build/9e/9eb16dabf1c6e1a672441c7c1fa0619ae4b1c850e74bfae8ae128e674c6a0bbb-d: internal error in importing \"os\" (cannot decode \"os\", export data version 5 is greater than maximum supported version 4); please report an issue)"
+			}
+		],
+		"$ROOT/cmd/app/main.go": [
+			{
+				"line": 3,
+				"column": 8,
+				"error": "could not import example.com/found (reading /elsewhere/Library/Caches/go-build/77/7735956c28f5b1165e810354369324f1996b12a180ef30add2909bd52e8450e9-d: internal error in importing \"example.com/found\" (cannot decode \"example.com/found\", export data version 5 is greater than maximum supported version 4); please report an issue)"
+			}
+		]
+	},
+	"Issues": [
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "328",
+				"url": "https://cwe.mitre.org/data/definitions/328.html"
+			},
+			"rule_id": "G401",
+			"details": "Use of weak cryptographic primitive",
+			"file": "$ROOT/a.go",
+			"code": "19: // Sum hashes b with MD5. (gosec: G401, G501)\n20: func Sum(b []byte) [16]byte { return md5.Sum(b) }\n21: \n",
+			"line": "20",
+			"column": "38",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "327",
+				"url": "https://cwe.mitre.org/data/definitions/327.html"
+			},
+			"rule_id": "G501",
+			"details": "Blocklisted import crypto/md5: weak cryptographic primitive",
+			"file": "$ROOT/a.go",
+			"code": "4: import (\n5: \t\"crypto/md5\"\n6: \t\"fmt\"\n",
+			"line": "5",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		}
+	],
+	"Stats": {
+		"files": 2,
+		"lines": 37,
+		"nosec": 0,
+		"found": 2
+	},
+	"GosecVersion": "dev"
+}

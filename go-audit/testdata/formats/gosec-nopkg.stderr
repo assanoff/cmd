@@ -1,0 +1,5 @@
+[gosec] 2026/10/16 17:40:22 Including rules: default
+[gosec] 2026/10/16 17:40:22 Excluding rules: default
+[gosec] 2026/10/16 17:40:22 Including analyzers: default
+[gosec] 2026/10/16 17:40:22 Excluding analyzers: default
+[gosec] 2026/10/16 17:40:22 No packages found

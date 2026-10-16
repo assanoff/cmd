@@ -1,0 +1,2 @@
+F1016 17:39:55.644237   13832 main.go:75] errors for ["./nosuch/..."]:
+./nosuch/...: -: pattern ./nosuch/...: lstat ./nosuch/: no such file or directory

@@ -258,6 +258,8 @@ func (a *audit) makeRun() error {
 // After an interrupt it prints "interrupted" and waits for the running
 // checks to stop.
 func (a *audit) runChecks(p *printer, checks []*check) []*result {
+	// The formats get the Go version from here, as the checks run at once.
+	a.goVersion, _ = a.goEnv("GOVERSION")
 	results := make([]*result, len(checks))
 	done := make([]chan struct{}, len(checks))
 	slots := make(chan struct{}, a.concurrency)

@@ -98,11 +98,83 @@ func TestFormats(t *testing.T) {
 		},
 		{"tidy", "diff", statusFound, []string{": diff current/go.mod tidy/go.mod"}, ""},
 		{"tidy-clean", "diff", statusOK, nil, ""},
+
+		{"staticcheck", "staticcheck", statusFound, []string{
+			"a.go:17:47 SA5009: Printf format %s reads arg #2, but call has only 1 args",
+			"cmd/app/main.go:8:6 U1000: func unused is unused",
+		}, ""},
+		{"staticcheck-broken", "staticcheck", statusError, nil, "./a.go:3:23: cannot use"},
+		{"staticcheck-badpkg", "staticcheck", statusError, nil, "pattern ./nosuch/...: lstat"},
+
+		{"golangci", "golangci", statusFound, []string{
+			"a.go:17:51 govet: printf: fmt.Sprintf format %s reads arg #2",
+			"a.go:23:25 errcheck: Error return value of `os.Remove` is not checked",
+			"cmd/app/main.go:8:6 unused: func unused is unused",
+		}, ""},
+		{"golangci-broken", "golangci", statusError, nil, "./a.go:3:23: cannot use"},
+		{"golangci-badconfig", "golangci", statusError, nil, "Error: unknown linters: 'nosuchlinter'"},
+
+		// The issues of gosec, with the errors of an old gosec taken out.
+		{"gosec", "gosec", statusFound, []string{
+			"a.go:5:2 G501: Blocklisted import crypto/md5",
+			"a.go:20:38 G401: Use of weak cryptographic primitive",
+		}, ""},
+		// A gosec built with an older Go than the module's.
+		{"gosec-old", "gosec", statusError, nil, "cannot read go1.27.2 packages: update gosec"},
+		{"gosec-broken", "gosec", statusError, nil, "./a.go:3:23: cannot use"},
+		{"gosec-nopkg", "gosec", statusError, nil, "No packages found"},
+
+		{"deadcode", "deadcode", statusFound, []string{
+			"a.go:14:17 : unreachable func: Store.GetCount",
+			"a.go:17:6 : unreachable func: Label",
+			"a.go:23:6 : unreachable func: Clean",
+			"a.go:26:6 : unreachable func: Deref",
+			"cmd/app/main.go:8:6 : unreachable func: unused",
+		}, ""},
+		{"deadcode-nomain", "deadcode", statusSkipped, nil, "no main package and no tests"},
+		{"deadcode-broken", "deadcode", statusError, nil, "a.go:3:23: cannot use"},
+
+		// One vulnerability is called, three more are in the module the
+		// code requires.
+		{"govulncheck", "govulncheck", statusFound, []string{
+			"a.go:7:65 GO-2021-0113: Out-of-bounds read in golang.org/x/text/language: " +
+				"golang.org/x/text/language.Parse is called; fixed in golang.org/x/text@v0.3.7",
+		}, "3 more in dependencies, not called"},
+		{
+			"govulncheck-offline", "govulncheck", statusError, nil,
+			"vuln.go.dev unreachable (offline? -skip govulncheck)",
+		},
+		{"govulncheck-broken", "govulncheck", statusError, nil, "a.go:3:23: cannot use"},
+
+		// The libraries of ai with no license file go-licenses knows, among
+		// its warnings.
+		{"go-licenses", "go-licenses", statusFound, []string{
+			"unknown: github.com/hybridgroup/yzma/exp/speculative: no license found",
+			"unknown: github.com/hybridgroup/yzma/pkg/download: no license found",
+			"unknown: github.com/hybridgroup/yzma/pkg/llama: no license found",
+			"unknown: github.com/hybridgroup/yzma/pkg/loader: no license found",
+			"unknown: github.com/hybridgroup/yzma/pkg/mtmd: no license found",
+			"unknown: github.com/hybridgroup/yzma/pkg/utils: no license found",
+		}, ""},
+		// The other two lines of go-licenses check, as its check.go prints
+		// them: no module at hand has such a license.
+		{"go-licenses-types", "go-licenses", statusFound, []string{
+			"AGPL-3.0: example.com/agpl: license AGPL-3.0 of the type Forbidden is not allowed",
+			"GPL-3.0: example.com/gpl: license GPL-3.0 is not allowed",
+		}, ""},
+		{
+			"go-licenses-bad", "go-licenses", statusError, nil,
+			"./nosuch/...: -: pattern ./nosuch/...: lstat",
+		},
+		// Warnings alone, with the exit code of a library not allowed.
+		{"go-licenses-noise", "go-licenses", statusError, nil, "exit status 1"},
 	}
 	root := t.TempDir()
 	for _, tt := range tests {
 		t.Run(tt.sample, func(t *testing.T) {
 			o := sample(t, tt.sample, root)
+			// As in the run of govulncheck over example.com/vuln.
+			o.module, o.goVersion = "example.com/vuln", "go1.27.2"
 			fs, note, ferr := formats[tt.format](o)
 			sortFindings(fs)
 			status, note := judge(o, fs, note, ferr, fmt.Errorf("exit status %d", o.code))
@@ -207,5 +279,51 @@ func TestShorten(t *testing.T) {
 	}
 	if got := shorten("short", 7); got != "short" {
 		t.Errorf("shorten of a short string = %q", got)
+	}
+}
+
+func TestGolangciSource(t *testing.T) {
+	// The line of code comes from golangci-lint, and addSource keeps it
+	// when the file says otherwise by now.
+	root := t.TempDir()
+	fs, _, err := golangciJSON(sample(t, "golangci", root))
+	if err != nil || len(fs) != 3 {
+		t.Fatalf("golangciJSON = %d findings, %v", len(fs), err)
+	}
+	writeFile(t, filepath.Join(root, "a.go"), "package found\n")
+	results := []*result{{findings: fs}}
+	addSource(root, results)
+	for _, f := range results[0].findings {
+		if f.Line == 23 && f.Source != `func Clean() { os.Remove("x") }` {
+			t.Errorf("the source of %s = %q, want that of golangci-lint", brief(f), f.Source)
+		}
+	}
+}
+
+func TestUnreadableJSON(t *testing.T) {
+	for _, name := range []string{"staticcheck", "golangci", "gosec", "deadcode", "govulncheck"} {
+		o := newOutput([]byte("{\"x\": [\n"), nil, 1, "/src/m")
+		if _, _, err := formats[name](o); err == nil || !strings.Contains(err.Error(), "unreadable JSON") {
+			t.Errorf("%s of broken JSON: err = %v, want unreadable JSON", name, err)
+		}
+	}
+}
+
+func TestGosecOfUnknownGo(t *testing.T) {
+	o := sample(t, "gosec-old", t.TempDir())
+	_, _, err := gosecJSON(o)
+	if err == nil || err.Error() != "cannot read this Go's packages: update gosec" {
+		t.Errorf("gosec with no Go version known: err = %v", err)
+	}
+}
+
+func TestVulnFinding(t *testing.T) {
+	o := newOutput(nil, nil, 0, "/src/m")
+	o.module = "example.com/m"
+	trace := []vulnFrame{{Module: "example.com/dep", Package: "example.com/dep/x", Function: "Get", Receiver: "*Client"}}
+	f := vulnFinding(o, "GO-2099-0001", "", trace)
+	want := finding{Rule: "GO-2099-0001", Message: ": example.com/dep/x.Client.Get is called; no fixed version"}
+	if f != want {
+		t.Errorf("a method with no fix, reached from no line of the module:\n got %+v\nwant %+v", f, want)
 	}
 }

@@ -1,0 +1,8 @@
+[gosec] 2026/10/16 17:32:23 Including rules: default
+[gosec] 2026/10/16 17:32:23 Excluding rules: default
+[gosec] 2026/10/16 17:32:23 Including analyzers: default
+[gosec] 2026/10/16 17:32:23 Excluding analyzers: default
+[gosec] 2026/10/16 17:32:23 Import directory: $ROOT
+[gosec] 2026/10/16 17:32:23 Checking package: broken
+[gosec] 2026/10/16 17:32:23 Checking file: $ROOT/a.go
+[gosec] 2026/10/16 17:32:23 Error building the SSA representation of the package broken: package broken has type errors, skipping SSA analysis, no ssa result

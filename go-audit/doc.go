@@ -34,10 +34,21 @@ status is 0 when nothing was found, 1 when something was, and 2 when a check
 failed or go-audit was called wrongly.
 
 -only runs the checks it names, those that are off as well; -skip leaves out
-the checks it names. -c N runs up to N checks at a time. Each check loads and
-type-checks the packages on its own, so N checks need about N times the
-memory of one; the lines are printed in the order of the config all the same.
-Ctrl-C stops the checks that run; no report is written then.
+the checks it names. Ctrl-C stops the checks that run; no report is written
+then.
+
+-c N runs up to N checks at a time; the lines are printed in the order of the
+config all the same. It gains little: each check loads and type-checks the
+packages on its own, on all the cores, so the checks share the processor
+while the memory they need adds up. With a cold build cache it loses, as the
+checks build the same dependencies at once, while with -c 1 the first check
+fills the cache for the rest. The wall time and the peak memory of all the
+processes, for the 14 checks of the built-in config over
+github.com/assanoff/cmd/ai on 8 cores and Go 1.27.2:
+
+	cache   -c 1          -c 4           -c 10
+	warm    39s   2.5 GB  35s    3.0 GB  33s  3.3 GB
+	cold    2m7s  2.8 GB  3m59s  3.4 GB
 
 The checks run in the module root, with packages relative to the current
 directory made relative to it. They do not change the module: go-audit writes
@@ -46,9 +57,10 @@ only into the store.
 # The config
 
 The checks are described in YAML. The built-in config is go-audit.yml in this
-directory; "go-audit config -init" puts a copy of it into the store, and the
-go-audit.yml in the store then replaces the built-in one as a whole, so that
-checks can be turned off, changed and added. "go-audit config" shows which
+directory; "go-audit config -init" puts a copy of it into the store, beside
+golangci.yml, the standard set of golangci-lint. The go-audit.yml in the
+store then replaces the built-in one as a whole, so that checks can be
+turned off, changed and added. "go-audit config" shows which
 file is in use, its checks, and the checks of the built-in config that one's
 own lacks or describes otherwise, so that what a newer go-audit brings is not
 lost silently. A check:
@@ -80,7 +92,8 @@ with no value, such as a program or a file that is not there, skips the check
 with a note. A mistake in the config stops go-audit with the file and the line
 of the check.
 
-The formats tell go-audit how to read what a check prints:
+The formats tell go-audit how to read what a check prints. Three suit many
+tools, so that a new check of such a tool needs no code:
 
 	vet-json  the JSON of go vet -json and of analyzers run with -json, such as
 	          nilaway: findings with the analyzer as the rule
@@ -88,9 +101,35 @@ The formats tell go-audit how to read what a check prints:
 	          or a file alone as gofmt -l does
 	diff      one finding when there is any output, as go mod tidy -diff prints
 
+The others are those of one tool each:
+
+	staticcheck  staticcheck -f json; a package that does not build is an error
+	golangci     golangci-lint run --output.json.path=stdout, with the line of
+	             code golangci-lint gives; the typecheck linter is an error
+	gosec        gosec -fmt=json; a package gosec could not type-check is an
+	             error, as its issues are then only what the syntax shows; a
+	             gosec built with an older Go cannot read the packages at all
+	deadcode     deadcode -json: unreachable functions; with no main package
+	             and no test there is nothing to start from, and the check is
+	             skipped
+	govulncheck  govulncheck -format json: a finding for each vulnerability the
+	             code calls, at the line that calls it; those in code it only
+	             imports or requires are counted in the note
+	go-licenses  go-licenses check: a finding with no position for each library
+	             whose license is unknown or not allowed, the license as the
+	             rule; the warnings around them are left out
+
 A check that exits non-zero and finds nothing failed, whatever its format;
 vet-json also takes an error of an analyzer or a non-zero exit of go vet for a
 failure, and lines anything on stderr with a non-zero exit.
+
+The built-in config runs go vet and the analyzers of go fix, staticcheck,
+golangci-lint twice, gosec, nilaway, deadcode, govulncheck, go-licenses,
+gostyle, gopls check, go mod tidy -diff and gofmt -l, in this order; shadow
+and capslock are there, off. golangci-lint runs once with the standard set,
+the same for every module, which golangci.yml in the store can change, and
+once more as golangci-project with the module's own config, if it has one.
+govulncheck needs the network: offline, -skip govulncheck.
 
 # Listing reports
 

@@ -1,0 +1,64 @@
+[
+	{
+		"Name": "found",
+		"Path": "example.com/found",
+		"Funcs": [
+			{
+				"Name": "Store.GetCount",
+				"Position": {
+					"File": "a.go",
+					"Line": 14,
+					"Col": 17
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Label",
+				"Position": {
+					"File": "a.go",
+					"Line": 17,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Clean",
+				"Position": {
+					"File": "a.go",
+					"Line": 23,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Deref",
+				"Position": {
+					"File": "a.go",
+					"Line": 26,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "main",
+		"Path": "example.com/found/cmd/app",
+		"Funcs": [
+			{
+				"Name": "unused",
+				"Position": {
+					"File": "cmd/app/main.go",
+					"Line": 8,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	}
+]

@@ -1,0 +1,15 @@
+# The set of linters the check golangci-lint of go-audit runs over every
+# module, whatever config the module has; the module's own config runs as
+# the check golangci-project.
+#
+# "go-audit config -init" puts this file into the store as golangci.yml.
+# Without it go-audit runs golangci-lint with --no-config, which is the same
+# standard set: errcheck, govet, ineffassign, staticcheck and unused.
+# golangci-lint help linters lists the others.
+version: "2"
+
+linters:
+  default: standard
+  # enable:
+  #   - errorlint
+  #   - misspell

@@ -1,0 +1,44 @@
+{
+	"Golang errors": {},
+	"Issues": [
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "328",
+				"url": "https://cwe.mitre.org/data/definitions/328.html"
+			},
+			"rule_id": "G401",
+			"details": "Use of weak cryptographic primitive",
+			"file": "$ROOT/a.go",
+			"code": "19: // Sum hashes b with MD5. (gosec: G401, G501)\n20: func Sum(b []byte) [16]byte { return md5.Sum(b) }\n21: \n",
+			"line": "20",
+			"column": "38",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "327",
+				"url": "https://cwe.mitre.org/data/definitions/327.html"
+			},
+			"rule_id": "G501",
+			"details": "Blocklisted import crypto/md5: weak cryptographic primitive",
+			"file": "$ROOT/a.go",
+			"code": "4: import (\n5: \t\"crypto/md5\"\n6: \t\"fmt\"\n",
+			"line": "5",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		}
+	],
+	"Stats": {
+		"files": 2,
+		"lines": 37,
+		"nosec": 0,
+		"found": 2
+	},
+	"GosecVersion": "dev"
+}

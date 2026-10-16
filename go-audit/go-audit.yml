@@ -19,7 +19,9 @@
 #              {project-golangci}  --config=<the module's golangci-lint config>
 #            {packages} and {files} take a whole argument each. A substitution
 #            with no value (no such program, no such file) skips the check.
-#   format   how go-audit reads the output: vet-json, lines or diff
+#   format   how go-audit reads the output: vet-json, lines or diff, which
+#            suit many tools, or the format of one tool: staticcheck,
+#            golangci, gosec, deadcode, govulncheck, go-licenses
 #            (go doc github.com/assanoff/cmd/go-audit tells them apart)
 #   install  what to go install when the command is missing
 #   go       the oldest Go the check works with, such as "1.26"
@@ -43,10 +45,58 @@ checks:
     go: "1.26"
     note: go fix -diff ./... shows the changes, go fix ./... makes them
 
+  - name: staticcheck
+    cmd: [staticcheck, -f, json, "{packages}"]
+    format: staticcheck
+    install: honnef.co/go/tools/cmd/staticcheck@latest
+
+  # The standard set of golangci-lint, the same for every module: the
+  # golangci.yml of the store, or --no-config without it. The limits are
+  # lifted, so that the count is the real one.
+  - name: golangci-lint
+    cmd: [golangci-lint, run, "{golangci-config}", --output.json.path=stdout, --path-mode=abs,
+      --show-stats=false, --max-issues-per-linter=0, --max-same-issues=0,
+      --allow-parallel-runners, "{packages}"]
+    format: golangci
+    install: github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+
+  # golangci-lint with the config of the module, if it has one.
+  - name: golangci-project
+    cmd: [golangci-lint, run, "{project-golangci}", --output.json.path=stdout, --path-mode=abs,
+      --show-stats=false, --max-issues-per-linter=0, --max-same-issues=0,
+      --allow-parallel-runners, "{packages}"]
+    format: golangci
+    install: github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+
+  - name: gosec
+    cmd: [gosec, -fmt=json, "{packages}"]
+    format: gosec
+    install: github.com/securego/gosec/v2/cmd/gosec@latest
+
   - name: nilaway
     cmd: [nilaway, -json, -pretty-print=false, "-include-pkgs={module}", "{packages}"]
     format: vet-json
     install: go.uber.org/nilaway/cmd/nilaway@latest
+
+  # Functions that no main package and no test reaches.
+  - name: deadcode
+    cmd: [deadcode, -json, -test, "{packages}"]
+    format: deadcode
+    install: golang.org/x/tools/cmd/deadcode@latest
+
+  # Known vulnerabilities in the code the module calls; needs vuln.go.dev.
+  - name: govulncheck
+    cmd: [govulncheck, -format, json, "{packages}"]
+    format: govulncheck
+    install: golang.org/x/vuln/cmd/govulncheck@latest
+
+  # The licenses of the libraries the packages build with, the module's own
+  # left out. A license go-licenses does not recognize comes out as unknown:
+  # add --ignore <library> to the cmd in your own config once you checked it.
+  - name: go-licenses
+    cmd: [go-licenses, check, "{packages}", --ignore, "{module}"]
+    format: go-licenses
+    install: github.com/google/go-licenses/v2@latest
 
   # gostyle finds .gostyle.yml at the git root by itself.
   - name: gostyle

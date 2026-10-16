@@ -1,0 +1,26 @@
+{
+	"Golang errors": {
+		"": [
+			{
+				"line": 0,
+				"column": 0,
+				"error": "# command-line-arguments\n./a.go:3:23: cannot use \"s\" (untyped string constant) as int value in return statement"
+			}
+		],
+		"$ROOT/a.go": [
+			{
+				"line": 3,
+				"column": 23,
+				"error": "cannot use \"s\" (untyped string constant) as int value in return statement"
+			}
+		]
+	},
+	"Issues": [],
+	"Stats": {
+		"files": 1,
+		"lines": 3,
+		"nosec": 0,
+		"found": 0
+	},
+	"GosecVersion": "dev"
+}

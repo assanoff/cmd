@@ -31,6 +31,12 @@ const configName = "go-audit.yml"
 //go:embed go-audit.yml
 var builtinConfig []byte
 
+// builtinGolangci is the standard set of golangci-lint that config -init
+// puts into the store.
+//
+//go:embed golangci.yml
+var builtinGolangci []byte
+
 // A config is what go-audit runs and how it links a report to the code.
 type config struct {
 	Editor string   `yaml:"editor"`
@@ -251,11 +257,11 @@ func validateArg(arg string) error {
 func configCommand() *command {
 	fs := flag.NewFlagSet("config", flag.ContinueOnError)
 	initFlag := fs.Bool("init", false,
-		"put "+configName+" into the store, unless one is there already")
+		"put "+configName+" and "+golangciName+" into the store, unless they are there already")
 	return &command{
 		name:  "config",
 		usage: "config [-init]",
-		short: "Show the config in use; -init puts a copy of the built-in one in the store",
+		short: "Show the config in use; -init puts copies of the built-in ones in the store",
 		flags: fs,
 		run: func(_ context.Context, args []string) error {
 			if len(args) > 0 {
@@ -379,8 +385,9 @@ func compareConfigs(mine, builtin *config) (missing, changed []string) {
 	return missing, changed
 }
 
-// initConfig puts the built-in config into the store, unless a config is
-// there already: one's own is never overwritten.
+// initConfig puts the built-in config and the standard set of golangci-lint
+// into the store, each unless a file of its name is there already: one's own
+// is never overwritten.
 func initConfig(w io.Writer, store string) error {
 	if err := os.MkdirAll(store, 0o755); err != nil {
 		return err
@@ -390,6 +397,7 @@ func initConfig(w io.Writer, store string) error {
 		data []byte
 	}{
 		{configName, builtinConfig},
+		{golangciName, builtinGolangci},
 	} {
 		path := filepath.Join(store, f.name)
 		out, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)

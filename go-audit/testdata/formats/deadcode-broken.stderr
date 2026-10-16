@@ -1,0 +1,2 @@
+$ROOT/a.go:3:23: cannot use "s" (untyped string constant) as int value in return statement
+deadcode: packages contain errors

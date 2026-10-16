@@ -1,0 +1,12 @@
+[gosec] 2026/10/16 17:32:23 Including rules: default
+[gosec] 2026/10/16 17:32:23 Excluding rules: default
+[gosec] 2026/10/16 17:32:23 Including analyzers: default
+[gosec] 2026/10/16 17:32:23 Excluding analyzers: default
+[gosec] 2026/10/16 17:32:23 Import directory: $ROOT
+[gosec] 2026/10/16 17:32:23 Import directory: $ROOT/cmd/app
+[gosec] 2026/10/16 17:32:23 Checking package: main
+[gosec] 2026/10/16 17:32:23 Checking package: found
+[gosec] 2026/10/16 17:32:23 Checking file: $ROOT/cmd/app/main.go
+[gosec] 2026/10/16 17:32:23 Checking file: $ROOT/a.go
+[gosec] 2026/10/16 17:32:23 Error building the SSA representation of the package main: package main has type errors, skipping SSA analysis, no ssa result
+[gosec] 2026/10/16 17:32:23 Error building the SSA representation of the package found: package found has type errors, skipping SSA analysis, no ssa result

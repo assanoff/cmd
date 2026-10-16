@@ -132,13 +132,13 @@ func summary(checks []checkReport) string {
 }
 
 // addSource puts into each finding the line of code it is about, as the
-// file is now, at the end of the run.
+// file is now, at the end of the run, unless its check gave the line.
 func addSource(root string, results []*result) {
 	files := map[string][]string{}
 	for _, r := range results {
 		for i := range r.findings {
 			f := &r.findings[i]
-			if f.File == "" || f.Line < 1 || filepath.IsAbs(f.File) {
+			if f.Source != "" || f.File == "" || f.Line < 1 || filepath.IsAbs(f.File) {
 				continue
 			}
 			lines, ok := files[f.File]

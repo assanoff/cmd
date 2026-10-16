@@ -1,0 +1,30 @@
+W1016 16:55:10.578349    6758 library.go:141] "github.com/ebitengine/purego" contains non-Go code that can't be inspected for further dependencies:
+/elsewhere/go/pkg/mod/github.com/ebitengine/purego@v0.11.1/abi_arm64.h
+/elsewhere/go/pkg/mod/github.com/ebitengine/purego@v0.11.1/dlfcn_stubs.s
+/elsewhere/go/pkg/mod/github.com/ebitengine/purego@v0.11.1/sys_arm64.s
+/elsewhere/go/pkg/mod/github.com/ebitengine/purego@v0.11.1/sys_unix_arm64.s
+/elsewhere/go/pkg/mod/github.com/ebitengine/purego@v0.11.1/zcallback_arm64.s
+W1016 16:55:10.578594    6758 library.go:141] "golang.org/x/sys/unix" contains non-Go code that can't be inspected for further dependencies:
+/elsewhere/go/pkg/mod/golang.org/x/sys@v0.48.0/unix/asm_bsd_arm64.s
+/elsewhere/go/pkg/mod/golang.org/x/sys@v0.48.0/unix/zsyscall_darwin_arm64.s
+W1016 16:55:10.578617    6758 library.go:141] "github.com/prometheus/client_golang/prometheus" contains non-Go code that can't be inspected for further dependencies:
+/elsewhere/go/pkg/mod/github.com/prometheus/client_golang@v1.24.1/prometheus/process_collector_mem_cgo_darwin.c
+W1016 16:55:10.578627    6758 library.go:141] "github.com/cespare/xxhash/v2" contains non-Go code that can't be inspected for further dependencies:
+/elsewhere/go/pkg/mod/github.com/cespare/xxhash/v2@v2.3.0/xxhash_arm64.s
+W1016 16:55:10.578973    6758 library.go:141] "golang.org/x/crypto/chacha20" contains non-Go code that can't be inspected for further dependencies:
+/elsewhere/go/pkg/mod/golang.org/x/crypto@v0.57.0/chacha20/chacha_arm64.s
+W1016 16:55:10.579105    6758 library.go:141] "github.com/envoyproxy/protoc-gen-validate/validate" contains non-Go code that can't be inspected for further dependencies:
+/elsewhere/go/pkg/mod/github.com/envoyproxy/protoc-gen-validate@v1.3.3/validate/validate.h
+W1016 16:55:10.579416    6758 library.go:141] "github.com/klauspost/compress/zstd" contains non-Go code that can't be inspected for further dependencies:
+/elsewhere/go/pkg/mod/github.com/klauspost/compress@v1.20.1/zstd/fse_decoder_arm64.s
+/elsewhere/go/pkg/mod/github.com/klauspost/compress@v1.20.1/zstd/seqdec_arm64.s
+W1016 16:55:10.579424    6758 library.go:141] "github.com/klauspost/compress/huff0" contains non-Go code that can't be inspected for further dependencies:
+/elsewhere/go/pkg/mod/github.com/klauspost/compress@v1.20.1/huff0/decompress_arm64.s
+W1016 16:55:10.579430    6758 library.go:141] "github.com/klauspost/compress/zstd/internal/xxhash" contains non-Go code that can't be inspected for further dependencies:
+/elsewhere/go/pkg/mod/github.com/klauspost/compress@v1.20.1/zstd/internal/xxhash/xxhash_arm64.s
+Did not find license for library 'github.com/hybridgroup/yzma/exp/speculative'.
+Did not find license for library 'github.com/hybridgroup/yzma/pkg/download'.
+Did not find license for library 'github.com/hybridgroup/yzma/pkg/llama'.
+Did not find license for library 'github.com/hybridgroup/yzma/pkg/loader'.
+Did not find license for library 'github.com/hybridgroup/yzma/pkg/mtmd'.
+Did not find license for library 'github.com/hybridgroup/yzma/pkg/utils'.

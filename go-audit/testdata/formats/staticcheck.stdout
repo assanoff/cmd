@@ -1,0 +1,2 @@
+{"code":"SA5009","severity":"error","location":{"file":"$ROOT/a.go","line":17,"column":47},"end":{"file":"$ROOT/a.go","line":17,"column":54},"message":"Printf format %s reads arg #2, but call has only 1 args"}
+{"code":"U1000","severity":"error","location":{"file":"$ROOT/cmd/app/main.go","line":8,"column":6},"end":{"file":"","line":0,"column":0},"message":"func unused is unused"}

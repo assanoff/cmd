@@ -11,6 +11,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"go.yaml.in/yaml/v3"
 )
 
 func TestBuiltinConfig(t *testing.T) {
@@ -29,7 +31,11 @@ func TestBuiltinConfig(t *testing.T) {
 			t.Errorf("check %s has no line", ch.Name)
 		}
 	}
-	if want := []string{"vet", "fix", "nilaway", "gostyle", "gopls", "tidy", "gofmt"}; !slices.Equal(on, want) {
+	want := []string{
+		"vet", "fix", "staticcheck", "golangci-lint", "golangci-project", "gosec", "nilaway",
+		"deadcode", "govulncheck", "go-licenses", "gostyle", "gopls", "tidy", "gofmt",
+	}
+	if !slices.Equal(on, want) {
 		t.Errorf("checks that are on: %v, want %v", on, want)
 	}
 	if want := []string{"shadow", "capslock"}; !slices.Equal(off, want) {
@@ -83,7 +89,8 @@ func TestConfigErrors(t *testing.T) {
 		{"checks:\n  - name: vet\n    cmd: [go]\n", "2: check vet: no format"},
 		{
 			"checks:\n  - name: vet\n    cmd: [go]\n    format: json\n",
-			`2: check vet: unknown format "json" (formats: diff, lines, vet-json)`,
+			`2: check vet: unknown format "json" (formats: deadcode, diff, go-licenses, ` +
+				`golangci, gosec, govulncheck, lines, staticcheck, vet-json)`,
 		},
 		{"checks:\n" + vet + vet, "5: check vet is described twice, first at line 2"},
 		{
@@ -141,8 +148,9 @@ func TestShowConfig(t *testing.T) {
 		"config:    built-in; go-audit config -init puts a copy in " + store,
 		"editor:    none",
 		"golangci:  none",
-		"  fix       vet-json  go 1.26  go vet -vettool={gotooldir}/fix -json {packages}",
-		"  capslock  diff      off      capslock",
+		"  fix               vet-json     go 1.26  go vet -vettool={gotooldir}/fix -json {packages}",
+		"  golangci-project  golangci              golangci-lint run {project-golangci} ",
+		"  capslock          diff         off      capslock",
 	} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("config of the built-in one:\n%s\nwant a line with %q", out.String(), want)
@@ -171,7 +179,8 @@ func TestShowConfig(t *testing.T) {
 	for _, want := range []string{
 		"config:    " + filepath.Join(store, configName),
 		"golangci:  " + filepath.Join(store, golangciName),
-		"has checks yours lacks: fix, nilaway, gostyle, gopls, tidy, shadow, capslock",
+		"has checks yours lacks: fix, staticcheck, golangci-lint, golangci-project, gosec, " +
+			"nilaway, deadcode, govulncheck, go-licenses, gostyle, gopls, tidy, shadow, capslock",
 		"describes otherwise: vet (cmd, note)",
 	} {
 		if !strings.Contains(out.String(), want) {
@@ -186,16 +195,23 @@ func TestInitConfig(t *testing.T) {
 	if err := initConfig(&out, store); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(store, configName)
-	if got, _ := os.ReadFile(path); !bytes.Equal(got, builtinConfig) {
-		t.Errorf("config -init wrote %d bytes, want the built-in config", len(got))
-	}
-	if !strings.Contains(out.String(), "wrote "+path) {
-		t.Errorf("config -init printed %q", out.String())
+	files := map[string][]byte{configName: builtinConfig, golangciName: builtinGolangci}
+	for name, want := range files {
+		path := filepath.Join(store, name)
+		if got, _ := os.ReadFile(path); !bytes.Equal(got, want) {
+			t.Errorf("config -init wrote %d bytes into %s, want the built-in one", len(got), name)
+		}
+		if !strings.Contains(out.String(), "wrote "+path) {
+			t.Errorf("config -init printed %q, no line for %s", out.String(), name)
+		}
 	}
 
-	// One's own config is never overwritten.
+	// One's own files are never overwritten; a missing one is written.
+	path := filepath.Join(store, configName)
 	writeFile(t, path, "mine\n")
+	if err := os.Remove(filepath.Join(store, golangciName)); err != nil {
+		t.Fatal(err)
+	}
 	out.Reset()
 	if err := initConfig(&out, store); err != nil {
 		t.Fatal(err)
@@ -203,7 +219,14 @@ func TestInitConfig(t *testing.T) {
 	if got, _ := os.ReadFile(path); string(got) != "mine\n" {
 		t.Errorf("config -init overwrote one's own config with %d bytes", len(got))
 	}
-	if !strings.Contains(out.String(), "kept "+path) {
+	if !strings.Contains(out.String(), "kept "+path) ||
+		!strings.Contains(out.String(), "wrote "+filepath.Join(store, golangciName)) {
 		t.Errorf("config -init over one's own config printed %q", out.String())
+	}
+
+	// The standard set is a config of golangci-lint v2.
+	var golangci struct{ Version string }
+	if err := yaml.Unmarshal(builtinGolangci, &golangci); err != nil || golangci.Version != "2" {
+		t.Errorf("golangci.yml: version %q, %v; want 2", golangci.Version, err)
 	}
 }

@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -147,8 +149,23 @@ func (r *report) name() string {
 	return strings.TrimSuffix(filepath.Base(r.path), ".md")
 }
 
-// loadReports returns the reports in the store, newest first. A store with
-// no reports directory yet has no reports.
+// seq returns the number of a report among those of its module written in
+// the same second: 1 for the first, n for the one whose name ends in -n.
+func (r *report) seq() int {
+	name := r.name()
+	i := strings.LastIndexByte(name, '-')
+	if i <= len(stampLayout) {
+		return 1
+	}
+	if n, err := strconv.Atoi(name[i+1:]); err == nil && n >= 2 {
+		return n
+	}
+	return 1
+}
+
+// loadReports returns the reports in the store, newest first; of those of
+// one module in the same second, the last written first. A store with no
+// reports directory yet has no reports.
 func loadReports(store string) ([]*report, error) {
 	dir := filepath.Join(store, "reports")
 	var reports []*report
@@ -168,10 +185,12 @@ func loadReports(store string) ([]*report, error) {
 		return nil, err
 	}
 	slices.SortFunc(reports, func(a, b *report) int {
-		if c := b.Time.Compare(a.Time); c != 0 {
-			return c
-		}
-		return strings.Compare(b.path, a.path)
+		return cmp.Or(
+			b.Time.Compare(a.Time),
+			strings.Compare(filepath.Dir(b.path), filepath.Dir(a.path)),
+			cmp.Compare(b.seq(), a.seq()),
+			strings.Compare(b.path, a.path),
+		)
 	})
 	return reports, nil
 }

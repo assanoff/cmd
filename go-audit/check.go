@@ -49,6 +49,7 @@ type audit struct {
 	logs        string // the directory for the output of the checks
 	time        time.Time
 	concurrency int
+	goVersion   string // go env GOVERSION in the module root, for the formats
 
 	// Found on first use, as not every check needs them; only the goroutine
 	// that prepares the commands touches them.
@@ -320,6 +321,7 @@ func (a *audit) run(r *result, argv []string) {
 	}
 
 	o := newOutput(stdout.Bytes(), stderr.Bytes(), code, a.mod.root)
+	o.module, o.goVersion = a.mod.path, a.goVersion
 	fs, note, ferr := formats[r.check.Format](o)
 	for i := range fs {
 		fs[i].Check = r.check.Name
@@ -334,8 +336,12 @@ func (a *audit) run(r *result, argv []string) {
 
 // judge returns the status of a check that ran, and its note. The exit code
 // alone decides nothing, as tools exit 1 on findings; a check failed when
-// its format says so, or when it exits non-zero and finds nothing.
+// its format says so, or when it exits non-zero and finds nothing. It was
+// skipped when its format says it does not apply.
 func judge(o *output, fs []finding, note string, ferr, runErr error) (string, string) {
+	if skip, ok := errors.AsType[skipError](ferr); ok {
+		return statusSkipped, string(skip)
+	}
 	switch {
 	case ferr != nil:
 		return statusError, ferr.Error()

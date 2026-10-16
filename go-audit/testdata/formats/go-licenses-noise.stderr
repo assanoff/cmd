@@ -1,0 +1,8 @@
+W1016 16:55:10.578349    6758 library.go:141] "github.com/ebitengine/purego" contains non-Go code that can't be inspected for further dependencies:
+/elsewhere/go/pkg/mod/github.com/ebitengine/purego@v0.11.1/abi_arm64.h
+/elsewhere/go/pkg/mod/github.com/ebitengine/purego@v0.11.1/dlfcn_stubs.s
+/elsewhere/go/pkg/mod/github.com/ebitengine/purego@v0.11.1/sys_arm64.s
+/elsewhere/go/pkg/mod/github.com/ebitengine/purego@v0.11.1/sys_unix_arm64.s
+/elsewhere/go/pkg/mod/github.com/ebitengine/purego@v0.11.1/zcallback_arm64.s
+W1016 16:55:10.578594    6758 library.go:141] "golang.org/x/sys/unix" contains non-Go code that can't be inspected for further dependencies:
+/elsewhere/go/pkg/mod/golang.org/x/sys@v0.48.0/unix/asm_bsd_arm64.s
