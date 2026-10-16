@@ -22,7 +22,7 @@
 #   format   how go-audit reads the output: vet-json, lines or diff, which
 #            suit many tools, or the format of one tool: staticcheck,
 #            golangci, gosec, deadcode, govulncheck, go-licenses
-#            (go doc github.com/assanoff/cmd/go-audit tells them apart)
+#            (go doc github.com/assanoff/cmd/go-audit@latest tells them apart)
 #   install  what to go install when the command is missing
 #   go       the oldest Go the check works with, such as "1.26"
 #   note     a line for the report when the check finds something
