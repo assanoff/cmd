@@ -44,13 +44,50 @@ func storeDir() (string, error) {
 
 // moduleDir returns the directory of module path mod in area ("reports" or
 // "runs") of the store. The path is escaped as in the module cache, so that
-// Foo and foo stay apart on a case-insensitive file system.
+// Foo and foo stay apart on a case-insensitive file system. Unlike the module
+// cache, the store takes any path a main module may have, "myapp" among them.
 func moduleDir(store, area, mod string) (string, error) {
-	esc, err := module.EscapePath(mod)
-	if err != nil {
+	if err := module.CheckImportPath(mod); err != nil {
 		return "", err
 	}
-	return filepath.Join(store, area, filepath.FromSlash(esc)), nil
+	esc := filepath.FromSlash(escapeModule(mod))
+	return filepath.Join(store, area, esc), nil
+}
+
+// escapeModule turns each capital letter of a module path into "!" and the
+// lower-case letter.
+func escapeModule(mod string) string {
+	var b strings.Builder
+	for _, r := range mod {
+		if 'A' <= r && r <= 'Z' {
+			b.WriteByte('!')
+			r += 'a' - 'A'
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// unescapeModule undoes escapeModule. It reports false for a string that
+// escapeModule cannot have made: one with a capital letter, or with a "!"
+// not followed by a lower-case letter.
+func unescapeModule(esc string) (string, bool) {
+	var b strings.Builder
+	bang := false
+	for _, r := range esc {
+		switch {
+		case bang && 'a' <= r && r <= 'z':
+			b.WriteRune(r - ('a' - 'A'))
+			bang = false
+		case bang, 'A' <= r && r <= 'Z':
+			return "", false
+		case r == '!':
+			bang = true
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String(), !bang
 }
 
 // goModule is the module that holds a directory.
@@ -191,7 +228,7 @@ func moduleFromDir(reports, dir string) string {
 		return ""
 	}
 	rel = filepath.ToSlash(rel)
-	if path, err := module.UnescapePath(rel); err == nil {
+	if path, ok := unescapeModule(rel); ok {
 		return path
 	}
 	return rel

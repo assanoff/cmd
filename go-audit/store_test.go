@@ -48,6 +48,10 @@ func TestModuleDir(t *testing.T) {
 		{"git.chocodev.kz/ryadom/payments", "git.chocodev.kz/ryadom/payments"},
 		{"github.com/BurntSushi/toml", "github.com/!burnt!sushi/toml"},
 		{"example.com/v2", "example.com/v2"},
+		// Paths of main modules that the module cache would not take.
+		{"myapp", "myapp"},
+		{"MyCompany/billing", "!my!company/billing"},
+		{"example.com/v1", "example.com/v1"},
 	}
 	store := t.TempDir()
 	reports := filepath.Join(store, "reports")
@@ -65,15 +69,21 @@ func TestModuleDir(t *testing.T) {
 		}
 	}
 
-	if _, err := moduleDir(store, "reports", "not a path"); err == nil {
-		t.Error(`moduleDir("not a path") succeeded, want an error`)
+	// Nothing that leaves the store or that escaping cannot undo.
+	for _, mod := range []string{"", "not a path", "../x", "a/../b", "a//b", "/abs", "a!b", "модуль"} {
+		if got, err := moduleDir(store, "reports", mod); err == nil {
+			t.Errorf("moduleDir(%q) = %q, want an error", mod, got)
+		}
 	}
 	if got := moduleFromDir(reports, reports); got != "" {
 		t.Errorf("moduleFromDir of the reports directory itself = %q, want empty", got)
 	}
 	// A directory no one escaped is shown as it is rather than dropped.
-	if got := moduleFromDir(reports, filepath.Join(reports, "Odd")); got != "Odd" {
-		t.Errorf("moduleFromDir of an unescaped directory = %q, want %q", got, "Odd")
+	for _, odd := range []string{"Odd", "odd!", "odd!1", "odd!!x"} {
+		dir := filepath.Join(reports, odd)
+		if got := moduleFromDir(reports, dir); got != odd {
+			t.Errorf("moduleFromDir of directory %q = %q, want it as it is", odd, got)
+		}
 	}
 }
 

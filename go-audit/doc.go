@@ -39,11 +39,14 @@ plain files and no database:
 	reports/<module>/<time>-audit.md            a go-audit report
 	reports/<module>/<time>-audit.json
 
-<module> is the module path from go.mod, escaped as in the module cache
-(golang.org/x/mod/module.EscapePath turns each capital letter into "!" and the
-lower-case letter), so that Foo and foo stay apart on a case-insensitive file
-system. <time> is YYYYMMDD-HHMMSS, first in the name, so that sorting by name
-is sorting by time.
+<module> is the module path from go.mod, escaped as in the module cache:
+each capital letter becomes "!" and the lower-case letter, so that Foo and foo
+stay apart on a case-insensitive file system. Any path a main module may have
+is taken, "myapp" as well as "github.com/BurntSushi/toml"; it is checked as
+golang.org/x/mod/module.CheckImportPath checks an import path. <time> is
+YYYYMMDD-HHMMSS in local time, first in the name, so that sorting by name is
+sorting by time. A second report of a module in the same second gets -2 at
+the end of its name, a third -3.
 
 The .md file is the report for people. Its .json twin is for programs; the
 list reads only these fields of it, which every kind of report has:
