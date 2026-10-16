@@ -1,0 +1,49 @@
+{
+	"example.com/broken": {
+		"buildssa": {
+			"error": "failed prerequisites: ctrlflow@example.com/broken"
+		},
+		"ctrlflow": {
+			"error": "analysis skipped due to errors in package"
+		},
+		"nilaway": {
+			"error": "failed prerequisites: nilaway_accumulation_analyzer@example.com/broken, nilaway_config@example.com/broken"
+		},
+		"nilaway_accumulation_analyzer": {
+			"error": "failed prerequisites: nilaway_annotation_analyzer@example.com/broken, nilaway_assertion_analyzer@example.com/broken, nilaway_config@example.com/broken, nilaway_nolint_analyzer@example.com/broken"
+		},
+		"nilaway_affiliation_analyzer": {
+			"error": "failed prerequisites: nilaway_config@example.com/broken"
+		},
+		"nilaway_annotation_analyzer": {
+			"error": "failed prerequisites: nilaway_config@example.com/broken"
+		},
+		"nilaway_anonymous_func_analyzer": {
+			"error": "failed prerequisites: nilaway_config@example.com/broken"
+		},
+		"nilaway_assertion_analyzer": {
+			"error": "failed prerequisites: nilaway_affiliation_analyzer@example.com/broken, nilaway_config@example.com/broken, nilaway_function_analyzer@example.com/broken, nilaway_global_var_analyzer@example.com/broken"
+		},
+		"nilaway_config": {
+			"error": "analysis skipped due to errors in package"
+		},
+		"nilaway_function_analyzer": {
+			"error": "failed prerequisites: ctrlflow@example.com/broken, nilaway_anonymous_func_analyzer@example.com/broken, nilaway_config@example.com/broken, nilaway_function_contracts_analyzer@example.com/broken, nilaway_struct_field_analyzer@example.com/broken, nilaway_struct_field_effects_analyzer@example.com/broken"
+		},
+		"nilaway_function_contracts_analyzer": {
+			"error": "failed prerequisites: buildssa@example.com/broken, nilaway_config@example.com/broken"
+		},
+		"nilaway_global_var_analyzer": {
+			"error": "failed prerequisites: nilaway_config@example.com/broken"
+		},
+		"nilaway_nolint_analyzer": {
+			"error": "analysis skipped due to errors in package"
+		},
+		"nilaway_struct_field_analyzer": {
+			"error": "failed prerequisites: nilaway_config@example.com/broken"
+		},
+		"nilaway_struct_field_effects_analyzer": {
+			"error": "failed prerequisites: nilaway_config@example.com/broken"
+		}
+	}
+}

@@ -1,0 +1,1 @@
+gopls: getFile: file://$ROOT/nosuch.go: open $ROOT/nosuch.go: no such file or directory

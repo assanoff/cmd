@@ -1,0 +1,11 @@
+{
+	"example.com/sample": {
+		"nilaway": [
+			{
+				"posn": "$ROOT/main.go:31:10",
+				"end": "$ROOT/main.go:31:10",
+				"message": "Potential nil panic detected. Observed nil flow from source to dereference point: \n\t- sample/main.go:31:10: unassigned variable `q` dereferenced\n"
+			}
+		]
+	}
+}

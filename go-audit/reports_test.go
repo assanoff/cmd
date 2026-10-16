@@ -7,6 +7,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"io"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -162,7 +163,9 @@ func TestListReportsUsage(t *testing.T) {
 			t.Errorf("reports %q: err = %v, want a usage error", args, err)
 		}
 	}
-	if err := reportsCommand().flags.Parse([]string{"-n", "x"}); err == nil {
+	fs := reportsCommand().flags
+	fs.SetOutput(io.Discard)
+	if err := fs.Parse([]string{"-n", "x"}); err == nil {
 		t.Error(`reports -n x parsed, want an error`)
 	}
 }

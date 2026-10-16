@@ -1,0 +1,2 @@
+# example.com/broken
+vet: ./b.go:3:23: undefined: undefinedThing

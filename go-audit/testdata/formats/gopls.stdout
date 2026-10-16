@@ -1,0 +1,2 @@
+$ROOT/main.go:19:7-26: bufio.Scanner "s" is used in Scan loop at line 20 without final check of s.Err()
+$ROOT/main.go:37:14-16: fmt.Printf format %d has arg "x" of wrong type string

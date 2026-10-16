@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"strings"
 	"syscall"
 	"text/tabwriter"
 )
@@ -24,7 +25,8 @@ import (
 const exitFailure = 2
 
 // command is one subcommand with its own flag set, so that go-audit -h lists
-// the commands and go-audit reports -h the flags of reports.
+// the commands and go-audit reports -h the flags of reports. Running the
+// checks is a command too, the one without a name.
 type command struct {
 	name  string
 	usage string
@@ -33,11 +35,16 @@ type command struct {
 	run   func(ctx context.Context, args []string) error
 }
 
-var commands []*command
+var (
+	auditCmd *command
+	commands []*command
+)
 
 func init() {
+	auditCmd = auditCommand()
 	commands = []*command{
 		reportsCommand(),
+		configCommand(),
 		versionCommand(),
 	}
 }
@@ -47,13 +54,19 @@ func init() {
 var stdout io.Writer = os.Stdout
 
 func usage() {
-	fmt.Fprint(os.Stderr, `usage: go-audit <command> [options]
+	fmt.Fprintf(os.Stderr, `usage: go-audit %s
+       go-audit <command> [options]
 
-Keeps the reports of Go code checks in one place: its own and those of the
-go-style Claude Code plugin.
+Runs the checks of its config, go vet, nilaway, gopls and others, over the Go
+module of the current directory and writes one report of them into the store
+in the home directory, beside the reports of the go-style Claude Code plugin.
+Exit status: 0 nothing found, 1 findings, 2 a check failed.
 
-commands:
-`)
+options:
+`, auditUsage)
+	auditCmd.flags.SetOutput(os.Stderr)
+	auditCmd.flags.PrintDefaults()
+	fmt.Fprint(os.Stderr, "\ncommands:\n")
 	w := tabwriter.NewWriter(os.Stderr, 0, 0, 2, ' ', 0)
 	for _, c := range commands {
 		_, _ = fmt.Fprintf(w, "  %s\t%s\n", c.usage, c.short)
@@ -62,7 +75,8 @@ commands:
 	// it leaves nothing to do differently.
 	_ = w.Flush()
 	fmt.Fprint(os.Stderr, `
-Run "go-audit <command> -h" for a command's own flags.
+Run "go-audit <command> -h" for a command's own flags and
+"go doc github.com/assanoff/cmd/go-audit" for all of it.
 `)
 }
 
@@ -70,31 +84,24 @@ func main() {
 	log.SetPrefix("go-audit: ")
 	log.SetFlags(0)
 
-	args := os.Args[1:]
-	if len(args) == 0 {
-		usage()
+	cmd, args, err := pickCommand(os.Args[1:])
+	if err != nil {
+		log.Print(err)
+		fmt.Fprintln(os.Stderr, `run "go-audit -h" for usage`)
 		os.Exit(exitFailure)
 	}
-	switch args[0] {
-	case "-h", "-help", "--help":
-		usage()
-		return
-	}
-	cmd := lookup(args[0])
-	if cmd == nil {
-		log.Printf("unknown command %q", args[0])
-		usage()
-		os.Exit(exitFailure)
-	}
-
-	cmd.flags.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: go-audit %s\n\n%s\n", cmd.usage, cmd.short)
-		if hasFlags(cmd.flags) {
-			fmt.Fprint(os.Stderr, "\noptions:\n")
-			cmd.flags.PrintDefaults()
+	if cmd == auditCmd {
+		cmd.flags.Usage = usage
+	} else {
+		cmd.flags.Usage = func() {
+			fmt.Fprintf(os.Stderr, "usage: go-audit %s\n\n%s\n", cmd.usage, cmd.short)
+			if hasFlags(cmd.flags) {
+				fmt.Fprint(os.Stderr, "\noptions:\n")
+				cmd.flags.PrintDefaults()
+			}
 		}
 	}
-	if err := cmd.flags.Parse(args[1:]); err != nil {
+	if err := cmd.flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return
 		}
@@ -104,13 +111,39 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := cmd.run(ctx, cmd.flags.Args()); err != nil {
+	err = cmd.run(ctx, cmd.flags.Args())
+	if code, ok := errors.AsType[exitStatus](err); ok {
+		stop()
+		os.Exit(int(code))
+	}
+	if err != nil {
 		log.Print(err)
 		if _, ok := errors.AsType[usageError](err); ok {
-			fmt.Fprintf(os.Stderr, "run \"go-audit %s -h\" for usage\n", cmd.name)
+			fmt.Fprintf(os.Stderr, "run \"%s -h\" for usage\n",
+				strings.TrimSpace("go-audit "+cmd.name))
 		}
+		stop()
 		os.Exit(exitFailure)
 	}
+}
+
+// pickCommand returns the command that args call for, and its arguments.
+// Without a command name go-audit runs the checks; a first argument that
+// looks like a name and is none is a mistake rather than a package, as no
+// one audits the standard library.
+func pickCommand(args []string) (*command, []string, error) {
+	if len(args) == 0 {
+		return auditCmd, args, nil
+	}
+	if c := lookup(args[0]); c != nil {
+		return c, args[1:], nil
+	}
+	name := args[0]
+	if !strings.HasPrefix(name, "-") && !strings.ContainsAny(name, `./\`) {
+		return nil, nil, fmt.Errorf("unknown command %q; packages are paths, such as ./%s",
+			name, name)
+	}
+	return auditCmd, args, nil
 }
 
 func lookup(name string) *command {

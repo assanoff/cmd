@@ -1,0 +1,25 @@
+{}
+{
+	"example.com/sample": {
+		"any": [
+			{
+				"posn": "$ROOT/main.go:10:20",
+				"end": "$ROOT/main.go:10:31",
+				"message": "interface{} can be replaced by any",
+				"suggested_fixes": [
+					{
+						"message": "Replace interface{} by any",
+						"edits": [
+							{
+								"filename": "$ROOT/main.go",
+								"start": 90,
+								"end": 101,
+								"new": "any"
+							}
+						]
+					}
+				]
+			}
+		]
+	}
+}

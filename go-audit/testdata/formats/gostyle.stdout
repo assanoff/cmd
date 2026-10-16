@@ -1,0 +1,26 @@
+{}
+{
+	"example.com/sample": {
+		"getters": [
+			{
+				"posn": "$ROOT/main.go:34:1",
+				"end": "$ROOT/main.go:34:1",
+				"message": "[gostyle.getters] Function and method names should not use a \"Get\" or \"get\" prefix, unless the underlying concept uses the word \"get\" (e.g. an HTTP GET). Prefer starting the name with the noun directly, for example use \"Counts\" over \"GetCounts\". (ref: https://google.github.io/styleguide/go/decisions#getters ): GetUserId"
+			}
+		],
+		"handlerrors": [
+			{
+				"posn": "$ROOT/main.go:38:10",
+				"end": "$ROOT/main.go:38:10",
+				"message": "[gostyle.handlerrors] Do not discard errors using `_` variables. If a function returns an error, check it to make sure the function succeeded. Handle the error, return it, or, in truly exceptional situations, panic. (ref: https://go.dev/wiki/CodeReviewComments#handle-errors )"
+			}
+		],
+		"useany": [
+			{
+				"posn": "$ROOT/main.go:10:18",
+				"end": "$ROOT/main.go:10:18",
+				"message": "[gostyle.useany] Because it is an alias, `any` is equivalent to `interface{}` in many situations and in others it is easily interchangeable via an explicit conversion. Prefer to use `any` in new code. (ref: https://google.github.io/styleguide/go/decisions#use-any ): interface{}"
+			}
+		]
+	}
+}

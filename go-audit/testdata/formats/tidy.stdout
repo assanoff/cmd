@@ -1,0 +1,17 @@
+diff current/go.mod tidy/go.mod
+--- current/go.mod
++++ tidy/go.mod
+@@ -1,5 +1,3 @@
+ module example.com/sample
+ 
+ go 1.27
+-
+-require golang.org/x/mod v0.42.0
+
+diff current/go.sum tidy/go.sum
+--- current/go.sum
++++ tidy/go.sum
+@@ -1,2 +0,0 @@
+-golang.org/x/mod v0.42.0 h1:ICeL3t2L30ljSPHHxDnR4fqVcBt/zR2zJAb9juavmQg=
+-golang.org/x/mod v0.42.0/go.mod h1:u5fzIrRInkL8MaO1cbRkUHT64v303YIT5KEqpNr7jRs=
+

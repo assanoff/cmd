@@ -1,0 +1,12 @@
+{}
+{
+	"example.com/sample": {
+		"printf": [
+			{
+				"posn": "$ROOT/main.go:37:14",
+				"end": "$ROOT/main.go:37:16",
+				"message": "fmt.Printf format %d has arg \"x\" of wrong type string"
+			}
+		]
+	}
+}

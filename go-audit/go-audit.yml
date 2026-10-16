@@ -1,0 +1,86 @@
+# go-audit runs these checks over a Go module, in this order, and writes one
+# report of them into the store: ~/.go-style, or $GO_STYLE_HOME.
+#
+# This is the built-in config. "go-audit config -init" puts a copy of it into
+# the store as go-audit.yml; that file then replaces this one as a whole, so
+# you can turn checks off, change them and add your own. "go-audit config"
+# shows which file is in use and what the built-in one has that yours lacks.
+#
+# A check:
+#   name     what -only and -skip take; also the name of its output files
+#   cmd      the command, run in the module root, with these substituted:
+#              {packages}          the packages go-audit was given, ./... by default
+#              {files}             the Go files of those packages, tests included
+#              {module}            the module path
+#              {gotooldir}         go env GOTOOLDIR: the tools of the module's Go
+#              {bin:NAME}          the full path of the program NAME
+#              {file:NAME}         the file NAME in the module root
+#              {golangci-config}   --config=<store>/golangci.yml, or --no-config
+#              {project-golangci}  --config=<the module's golangci-lint config>
+#            {packages} and {files} take a whole argument each. A substitution
+#            with no value (no such program, no such file) skips the check.
+#   format   how go-audit reads the output: vet-json, lines or diff
+#            (go doc github.com/assanoff/cmd/go-audit tells them apart)
+#   install  what to go install when the command is missing
+#   go       the oldest Go the check works with, such as "1.26"
+#   note     a line for the report when the check finds something
+#   off      true: described, but run only when -only names it
+
+# Where a file:line of a report opens in a browser; empty: the file itself.
+# {path} is absolute. For example vscode://file/{path}:{line}:{col},
+# zed://file/{path}:{line}:{col} or idea://open?file={path}&line={line}.
+editor: ""
+
+checks:
+  - name: vet
+    cmd: [go, vet, -json, "{packages}"]
+    format: vet-json
+
+  # The analyzers of go fix, checking only: the code they would modernize.
+  - name: fix
+    cmd: [go, vet, "-vettool={gotooldir}/fix", -json, "{packages}"]
+    format: vet-json
+    go: "1.26"
+    note: go fix -diff ./... shows the changes, go fix ./... makes them
+
+  - name: nilaway
+    cmd: [nilaway, -json, -pretty-print=false, "-include-pkgs={module}", "{packages}"]
+    format: vet-json
+    install: go.uber.org/nilaway/cmd/nilaway@latest
+
+  # gostyle finds .gostyle.yml at the git root by itself.
+  - name: gostyle
+    cmd: [go, vet, "-vettool={bin:gostyle}", -json, "{packages}"]
+    format: vet-json
+    install: github.com/k1LoW/gostyle@latest
+
+  - name: gopls
+    cmd: [gopls, check, "{files}"]
+    format: lines
+    install: golang.org/x/tools/gopls@latest
+
+  - name: tidy
+    cmd: [go, mod, tidy, -diff]
+    format: diff
+    note: go mod tidy brings go.mod and go.sum in order
+
+  - name: gofmt
+    cmd: [gofmt, -l, -s, "{files}"]
+    format: lines
+    note: gofmt -s -w <file> formats a file
+
+  - name: shadow
+    off: true
+    cmd: [shadow, -json, "{packages}"]
+    format: vet-json
+    install: golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow@latest
+
+  # Capabilities (files, network, exec…) the code gained since a baseline the
+  # module keeps: capslock -packages ./... -output=json > capslock.json, then
+  # commit it. Off by default: on a large module it needs gigabytes of memory.
+  - name: capslock
+    off: true
+    cmd: [capslock, -packages=./..., -output=compare, "{file:capslock.json}"]
+    format: diff
+    install: github.com/google/capslock/cmd/capslock@latest
+    note: new capabilities since capslock.json; once they are fine, write it anew
