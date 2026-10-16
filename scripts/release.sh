@@ -212,7 +212,10 @@ cmd_release() {
 	check_version
 	check_changes
 	echo ">> verifying $MOD"
-	(cd "$MOD" && $GO build ./... && $GO test -short ./...)
+	# -o /dev/null: in a module of one main package, as radio is, a plain
+	# `go build ./...` writes the binary into the module, and the tree is no
+	# longer clean after the release.
+	(cd "$MOD" && $GO build -o /dev/null ./... && $GO test -short ./...)
 	echo ">> tagging $MOD/$VERSION"
 	git tag -a "$MOD/$VERSION" -m "$MOD $VERSION"
 	echo ">> pushing $MOD/$VERSION"
