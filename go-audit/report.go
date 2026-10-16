@@ -62,7 +62,7 @@ func (a *audit) writeReport(results []*result, wall time.Duration) (string, erro
 	if err := os.WriteFile(strings.TrimSuffix(md, ".md")+".json", data, 0o644); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(md, []byte(markdown(rep)), 0o644); err != nil {
+	if err := os.WriteFile(md, []byte(auditMarkdown(rep)), 0o644); err != nil {
 		return "", err
 	}
 	return md, nil
@@ -169,10 +169,10 @@ func readLines(path string) []string {
 	return lines // a line too long ends them early: the rest have no source
 }
 
-// markdown renders the report for people: a header, a table of the checks,
+// auditMarkdown renders the report for people: a header, a table of the checks,
 // and a section with the findings of each check that has some, each with
 // its line of code.
-func markdown(rep *auditReport) string {
+func auditMarkdown(rep *auditReport) string {
 	var b strings.Builder
 	p := func(format string, args ...any) { fmt.Fprintf(&b, format, args...) }
 

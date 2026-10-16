@@ -44,6 +44,7 @@ func init() {
 	auditCmd = auditCommand()
 	commands = []*command{
 		reportsCommand(),
+		showCommand(),
 		configCommand(),
 		versionCommand(),
 	}

@@ -98,6 +98,9 @@ type goModule struct {
 	root string // the directory of go.mod
 }
 
+// errNoModule is the error of findModule outside a module.
+var errNoModule = errors.New("not inside a Go module")
+
 // findModule returns the module holding dir, as the go command sees it.
 func findModule(ctx context.Context, dir string) (goModule, error) {
 	cmd := exec.CommandContext(ctx, "go", "env", "GOMOD")
@@ -113,7 +116,7 @@ func findModule(ctx context.Context, dir string) (goModule, error) {
 	}
 	gomod := strings.TrimSpace(string(out))
 	if gomod == "" || gomod == os.DevNull {
-		return goModule{}, fmt.Errorf("not inside a Go module (no go.mod in %s or above)", dir)
+		return goModule{}, fmt.Errorf("%w (no go.mod in %s or above)", errNoModule, dir)
 	}
 	data, err := os.ReadFile(gomod)
 	if err != nil {

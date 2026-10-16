@@ -11,6 +11,7 @@ Usage:
 
 	go-audit [-c N] [-only a,b] [-skip a,b] [packages]
 	go-audit reports [-n N] [filter]
+	go-audit show [-o file] [report]
 	go-audit config [-init]
 	go-audit version
 
@@ -147,6 +148,29 @@ report, the number of findings and a one-line summary. A report whose JSON
 twin is missing, unreadable or of an older format is listed all the same, with
 the reason in place of the summary.
 
+# Showing a report
+
+go-audit show writes a report as a page of HTML beside it in the store and
+opens the page in a web browser. With no argument it is the newest report of
+the module holding the current directory, or outside a module the newest of
+all. An argument is the path of a report, its .md or its .json; its name or
+the start of it, such as its time; or a part of its module and name that
+only one report has:
+
+	go-audit show
+	go-audit show 20261016-1749
+	go-audit show payments
+	go-audit show -o report.html
+
+The -o flag writes the page there instead and opens no browser, for a page to
+keep or to send; as in the go command, a directory takes the default name.
+
+The page works for both kinds of report. A position in it, file:line[:col] in
+code or in the text, links to the file when it is under the root of the
+report: into the editor of the config, or to the file itself without one.
+HTML in a report is shown as text, and so is a link anywhere but to the web,
+to mail or within the page, as a report quotes what tools print about code.
+
 # The store
 
 The store is $GO_STYLE_HOME, or .go-style in the home directory. It holds
@@ -158,6 +182,7 @@ plain files and no database:
 	reports/<module>/<time>-style-<label>.json
 	reports/<module>/<time>-audit.md            a go-audit report
 	reports/<module>/<time>-audit.json
+	reports/<module>/<time>-<kind>.html         the page of go-audit show
 	runs/<module>/<time>-audit/<check>.out      the stdout of a check
 	runs/<module>/<time>-audit/<check>.log      its stderr
 
