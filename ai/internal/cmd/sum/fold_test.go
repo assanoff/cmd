@@ -20,8 +20,10 @@ func TestDemote(t *testing.T) {
 		{"a hash without a space is a word", "no heading here\n#hashtag-ish", "no heading here\n#hashtag-ish"},
 		{"bare hashes still count", "##", "###"},
 		{"stops at six", "###### Deep", "###### Deep"},
-		{"fenced code is left alone", "## T\n\n```sh\n# a comment\n```\n## U",
-			"### T\n\n```sh\n# a comment\n```\n### U"},
+		{
+			"fenced code is left alone", "## T\n\n```sh\n# a comment\n```\n## U",
+			"### T\n\n```sh\n# a comment\n```\n### U",
+		},
 		{"empty", "", ""},
 	}
 	for _, tt := range tests {
