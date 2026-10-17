@@ -10,7 +10,7 @@
 #   name     what -only and -skip take; also the name of its output files
 #   cmd      the command, run in the module root, with these substituted:
 #              {packages}          the packages go-audit was given, ./... by default
-#              {files}             the Go files of those packages, tests included
+#              {files}             the Go files of those packages that are in scope
 #              {module}            the module path
 #              {gotooldir}         go env GOTOOLDIR: the tools of the module's Go
 #              {bin:NAME}          the full path of the program NAME

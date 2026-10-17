@@ -9,7 +9,8 @@ its own and those of the go-style Claude Code plugin.
 
 Usage:
 
-	go-audit [-c N] [-only a,b] [-skip a,b] [packages]
+	go-audit [-c N] [-only a,b] [-skip a,b] [-no-tests]
+	         [-diff rev] [-staged] [-unstaged] [-whole-files] [packages | files]
 	go-audit reports [-n N] [filter]
 	go-audit show [-o file] [report]
 	go-audit web [-a addr] [-n]
@@ -53,8 +54,51 @@ github.com/assanoff/cmd/ai on 8 cores and Go 1.27.2:
 	cold    2m7s  2.8 GB  3m59s  3.4 GB
 
 The checks run in the module root, with packages relative to the current
-directory made relative to it. They do not change the module: go-audit writes
+directory made relative to it. A directory may go without ./ in front, as
+internal/store or internal/..., when it is there; the go command would take
+it for an import path. The checks do not change the module: go-audit writes
 only into the store.
+
+# The scope
+
+Some flags and arguments narrow what the report has, its scope:
+
+	go-audit internal/store/store.go cmd/main.go   # these files
+	go-audit -no-tests                             # all but the _test.go files
+	go-audit -staged                               # the lines in the index
+	go-audit -unstaged                             # the lines changed since, and new files
+	go-audit -staged -unstaged                     # all that is not committed
+	go-audit -diff origin/master                   # since the branch began, committed or not
+	go-audit -staged -whole-files ./internal/...   # all lines of the staged files there
+
+Go files as arguments stand for the packages of their directories, and the
+report keeps the findings in those files alone; as with the go command,
+files and packages do not mix. -no-tests leaves out the findings in
+_test.go files.
+
+-staged keeps the findings on the lines that changed in the index since
+HEAD, and -unstaged those on the lines that changed in the working tree and
+are not staged, as well as in the Go files git does not track yet; the two
+together keep all that is not committed. -diff rev keeps the lines changed
+since the commit where HEAD and rev part ways, committed or not, and the new
+files: the work of a branch, with -diff origin/master. -diff HEAD is the
+same as -staged -unstaged, and goes with neither. -whole-files keeps all
+lines of the files that changed rather than only those that did. The lines
+of the index are found where they are in the working tree, as the checks
+read the files there; a staged line changed again since is no longer there
+to report. Settings of git such as diff.noprefix change nothing here.
+
+The checks run over the packages all the same, ./... by default, as most
+tools take nothing smaller than a package, and some, such as deadcode, need
+the whole program to be right. Only {files} narrows to the files in scope,
+so that gofmt and gopls check read no more. To be quick over a large module,
+name the packages too: go-audit -staged ./internal/... A finding out of
+scope is left out of the report and counted in the note of its check, "3 out
+of scope"; a check whose findings are all out of it is ok. With files or
+changes in git, the findings about no file in particular, such as a go.mod
+that is not tidy or a license, are out of scope too. When the scope has no
+Go file at all, go-audit says so and exits 0 with no report, so that
+go-audit -staged in a hook of git lets a commit of other files through.
 
 # The config
 
@@ -80,7 +124,7 @@ for the report and "off: true", which leaves it out unless -only names it.
 The command may use these substitutions:
 
 	{packages}          the packages go-audit was given, ./... by default
-	{files}             the Go files of those packages, tests included
+	{files}             the Go files of those packages that are in scope
 	{module}            the module path
 	{gotooldir}         go env GOTOOLDIR in the module root: the tools of the
 	                    Go that GOTOOLCHAIN picks there
@@ -241,13 +285,15 @@ list reads only these fields of it, which every kind of report has:
 	module   the module path
 	root     the directory the module was in when it was checked
 	time     when the report was written, RFC 3339 with a UTC offset
-	label    the guides of a style report, the packages of an audit
+	label    the guides of a style report; the packages or files of an
+	         audit, and the flags of its scope
 	total    the number of findings (of a style report: the verified ones)
 	summary  one line for the list, such as "must 58 · should 336 · consider 65"
 
 Everything else in the JSON belongs to its kind, so a new kind of report needs
-no change to the list. That of an audit has the packages, the Go version, the
-config, -c, the wall time and the directory of the output; checks, each with
+no change to the list. That of an audit has the packages, the files named and
+the flags of the scope, if any, the Go version, the config, -c, the wall time
+and the directory of the output; checks, each with
 its name, status, count, seconds, note and output files; and findings, each
 with its check, file, line, col, rule, message and the line of code at the
 time of the run.

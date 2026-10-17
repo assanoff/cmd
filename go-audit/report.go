@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -21,6 +22,8 @@ type auditReport struct {
 	report
 
 	Packages    []string      `json:"packages"`
+	Files       []string      `json:"files,omitempty"` // the files named, if any
+	Scope       string        `json:"scope,omitempty"` // the flags that set it
 	Go          string        `json:"go"`
 	Config      string        `json:"config"`
 	Concurrency int           `json:"concurrency"`
@@ -68,6 +71,17 @@ func (a *audit) writeReport(results []*result, wall time.Duration) (string, erro
 	return md, nil
 }
 
+// label is what the audit covers, as its report and the line of the report
+// in the list name it: the packages or the files named, and the flags that
+// set the scope.
+func (a *audit) label() string {
+	what := a.packages
+	if len(a.named) > 0 {
+		what = a.named
+	}
+	return strings.Join(slices.Concat(what, a.scopeFlags), " ")
+}
+
 // report gathers what the report says.
 func (a *audit) report(results []*result, wall time.Duration) *auditReport {
 	goVersion, _ := a.goEnv("GOVERSION")
@@ -78,9 +92,11 @@ func (a *audit) report(results []*result, wall time.Duration) *auditReport {
 			Module: a.mod.path,
 			Root:   a.mod.root,
 			Time:   a.time,
-			Label:  strings.Join(a.packages, " "),
+			Label:  a.label(),
 		},
 		Packages:    a.packages,
+		Files:       a.named,
+		Scope:       strings.Join(a.scopeFlags, " "),
 		Go:          goVersion,
 		Config:      a.cfg.source(),
 		Concurrency: a.concurrency,
@@ -177,7 +193,10 @@ func auditMarkdown(rep *auditReport) string {
 	p := func(format string, args ...any) { fmt.Fprintf(&b, format, args...) }
 
 	p("# go-audit: %s\n\n", rep.Module)
-	p("- **Packages:** `%s` in `%s`\n", rep.Label, rep.Root)
+	p("- **Packages:** `%s` in `%s`\n", strings.Join(rep.Packages, " "), rep.Root)
+	if len(rep.Files) > 0 || rep.Scope != "" {
+		p("- **Scope:** `%s`\n", strings.TrimSpace(strings.Join(rep.Files, " ")+" "+rep.Scope))
+	}
 	p("- **Time:** %s · **Go:** %s · **Wall:** %s with -c %d\n",
 		rep.Time.Format("2006-01-02 15:04:05 -07:00"), orDash(rep.Go),
 		duration(time.Duration(rep.Wall*float64(time.Second))), rep.Concurrency)

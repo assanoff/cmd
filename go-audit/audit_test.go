@@ -106,11 +106,17 @@ func helperSetup(t *testing.T, checks ...[]string) string {
 // auditOut runs go-audit and returns what it printed.
 func auditOut(t *testing.T, ctx context.Context, c int, only string, args ...string) (string, error) {
 	t.Helper()
+	return auditWith(t, ctx, auditOptions{concurrency: c, only: only}, args...)
+}
+
+// auditWith runs go-audit with the options o and returns what it printed.
+func auditWith(t *testing.T, ctx context.Context, o auditOptions, args ...string) (string, error) {
+	t.Helper()
 	var out bytes.Buffer
 	saved := stdout
 	stdout = &out
 	defer func() { stdout = saved }()
-	err := runAudit(ctx, c, only, "", args)
+	err := runAudit(ctx, &o, args)
 	return out.String(), err
 }
 

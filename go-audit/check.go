@@ -44,6 +44,9 @@ type audit struct {
 	cfg         *config
 	mod         goModule
 	packages    []string // patterns as the checks get them in the module root
+	named       []string // the Go files named, module-relative; nil: the packages
+	scope       scope    // what of the findings the report has
+	scopeFlags  []string // the flags that set the scope, for the label
 	store       string
 	name        string // <time>-audit, the name of the run and of its report
 	logs        string // the directory for the output of the checks
@@ -125,7 +128,7 @@ func (a *audit) expand(ch *check, arg string) ([]string, string, error) {
 				return nil, "", err
 			}
 			if len(files) == 0 {
-				return nil, "no Go files in " + strings.Join(a.packages, " "), nil
+				return nil, "no Go files in " + a.label(), nil
 			}
 			return files, "", nil
 		}
@@ -198,8 +201,8 @@ func (a *audit) goEnv(key string) (string, error) {
 	return a.goenv[key], a.goenvErr
 }
 
-// goFiles returns the Go files of the packages, tests included, as go list
-// sees them in the module root.
+// goFiles returns the Go files of the packages that are in scope, tests
+// included unless -no-tests, as go list sees them in the module root.
 func (a *audit) goFiles() ([]string, error) {
 	if a.filesDone {
 		return a.files, a.filesErr
@@ -212,6 +215,7 @@ func (a *audit) goFiles() ([]string, error) {
 		a.filesErr = fmt.Errorf("go list: %v", err)
 		return nil, a.filesErr
 	}
+	paths := newOutput(nil, nil, 0, a.mod.root)
 	dec := json.NewDecoder(bytes.NewReader(out))
 	for dec.More() {
 		var p struct {
@@ -223,7 +227,10 @@ func (a *audit) goFiles() ([]string, error) {
 			return nil, a.filesErr
 		}
 		for _, f := range slices.Concat(p.GoFiles, p.CgoFiles, p.TestGoFiles, p.XTestGoFiles) {
-			a.files = append(a.files, filepath.Join(p.Dir, f))
+			path := filepath.Join(p.Dir, f)
+			if a.scope.hasFile(paths.rel(path)) {
+				a.files = append(a.files, path)
+			}
 		}
 	}
 	slices.Sort(a.files)
@@ -348,6 +355,7 @@ func (a *audit) run(r *result, argv []string) {
 	sortFindings(fs)
 	r.findings = fs
 	r.status, r.note = judge(o, fs, note, ferr, err)
+	a.scope.filter(r)
 	if r.status == statusFound && r.check.Note != "" {
 		r.note = strings.TrimPrefix(r.note+" · "+r.check.Note, " · ")
 	}

@@ -13,27 +13,72 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 )
 
 // auditUsage is the usage line of go-audit running its checks.
-const auditUsage = "[-c N] [-only a,b] [-skip a,b] [packages]"
+const auditUsage = "[-c N] [-only a,b] [-skip a,b] [-no-tests]\n" +
+	"                [-diff rev] [-staged] [-unstaged] [-whole-files] [packages | files]"
+
+// auditOptions are the flags of go-audit running its checks.
+type auditOptions struct {
+	concurrency int
+	only, skip  string
+	noTests     bool
+	diff        string // a revision to report the lines changed since
+	staged      bool
+	unstaged    bool
+	wholeFiles  bool
+}
 
 func auditCommand() *command {
 	fs := flag.NewFlagSet("go-audit", flag.ContinueOnError)
-	c := fs.Int("c", 1, "run up to `N` checks at a time")
-	only := fs.String("only", "", "run only the checks `a,b`, those that are off as well")
-	skip := fs.String("skip", "", "run all checks but `a,b`")
+	var o auditOptions
+	fs.IntVar(&o.concurrency, "c", 1, "run up to `N` checks at a time")
+	fs.StringVar(&o.only, "only", "", "run only the checks `a,b`, those that are off as well")
+	fs.StringVar(&o.skip, "skip", "", "run all checks but `a,b`")
+	fs.BoolVar(&o.noTests, "no-tests", false, "leave out the findings in _test.go files")
+	fs.StringVar(&o.diff, "diff", "",
+		"report only the lines changed since `rev`, committed or not, and new files")
+	fs.BoolVar(&o.staged, "staged", false, "report only the lines changed in the index")
+	fs.BoolVar(&o.unstaged, "unstaged", false,
+		"report only the lines changed in the working tree and not staged, and new files")
+	fs.BoolVar(&o.wholeFiles, "whole-files", false,
+		"with -diff, -staged or -unstaged: report all lines of the files that changed")
 	return &command{
 		usage: auditUsage,
 		short: "Run the checks over the packages, ./... by default, and write a report",
 		flags: fs,
 		run: func(ctx context.Context, args []string) error {
-			return runAudit(ctx, *c, *only, *skip, args)
+			return runAudit(ctx, &o, args)
 		},
 	}
+}
+
+// changes reports whether the options ask for the lines changed in git.
+func (o *auditOptions) changes() bool {
+	return o.diff != "" || o.staged || o.unstaged
+}
+
+// scopeFlags returns the flags that set the scope, as they were given.
+func (o *auditOptions) scopeFlags() []string {
+	var flags []string
+	if o.diff != "" {
+		flags = append(flags, "-diff "+o.diff)
+	}
+	for _, f := range []struct {
+		on   bool
+		name string
+	}{{o.staged, "-staged"}, {o.unstaged, "-unstaged"},
+		{o.wholeFiles, "-whole-files"}, {o.noTests, "-no-tests"}} {
+		if f.on {
+			flags = append(flags, f.name)
+		}
+	}
+	return flags
 }
 
 // exitStatus is an error that sets the exit code alone: what it stands for
@@ -44,12 +89,19 @@ func (e exitStatus) Error() string {
 	return fmt.Sprintf("exit status %d", int(e))
 }
 
-// runAudit runs the checks over the packages in args and writes the report.
-// It returns exitStatus 1 when a check found something and exitFailure when
-// one could not do its job or the run was interrupted.
-func runAudit(ctx context.Context, concurrency int, only, skip string, args []string) error {
-	if concurrency < 1 {
-		return usagef("-c is how many checks run at a time: 1 or more, not %d", concurrency)
+// runAudit runs the checks over the packages or files in args and writes
+// the report. It returns exitStatus 1 when a check found something in scope
+// and exitFailure when one could not do its job or the run was interrupted.
+func runAudit(ctx context.Context, o *auditOptions, args []string) error {
+	if o.concurrency < 1 {
+		return usagef("-c is how many checks run at a time: 1 or more, not %d", o.concurrency)
+	}
+	if o.diff != "" && (o.staged || o.unstaged) {
+		return usagef("-diff goes with neither -staged nor -unstaged; " +
+			"-diff HEAD is what both of them are")
+	}
+	if o.wholeFiles && !o.changes() {
+		return usagef("-whole-files goes with -diff, -staged or -unstaged")
 	}
 	store, err := storeDir()
 	if err != nil {
@@ -59,7 +111,7 @@ func runAudit(ctx context.Context, concurrency int, only, skip string, args []st
 	if err != nil {
 		return err
 	}
-	checks, err := selectChecks(cfg, only, skip)
+	checks, err := selectChecks(cfg, o.only, o.skip)
 	if err != nil {
 		return err
 	}
@@ -71,7 +123,7 @@ func runAudit(ctx context.Context, concurrency int, only, skip string, args []st
 	if err != nil {
 		return err
 	}
-	pkgs, err := rebase(wd, mod.root, args)
+	pkgs, files, err := targets(wd, mod.root, args)
 	if err != nil {
 		return err
 	}
@@ -81,9 +133,33 @@ func runAudit(ctx context.Context, concurrency int, only, skip string, args []st
 		cfg:         cfg,
 		mod:         mod,
 		packages:    pkgs,
+		named:       files,
+		scopeFlags:  o.scopeFlags(),
 		store:       store,
 		time:        time.Now().Truncate(time.Second),
-		concurrency: concurrency,
+		concurrency: o.concurrency,
+	}
+	a.scope = scope{noTests: o.noTests, whole: o.wholeFiles}
+	if len(files) > 0 {
+		a.scope.files = map[string]bool{}
+		for _, f := range files {
+			a.scope.files[f] = true
+		}
+	}
+	if o.changes() {
+		a.scope.changes, err = a.gitChanges(o.diff, o.staged, o.unstaged)
+		if err != nil {
+			return err
+		}
+	}
+	// Nothing to check is not a failure: -staged in a hook of git, say,
+	// with only a README staged.
+	if a.scope.narrow() {
+		if gofiles, err := a.goFiles(); err == nil && len(gofiles) == 0 {
+			_, err := fmt.Fprintf(stdout, "%s: no Go files in scope, nothing to check\n",
+				a.label())
+			return err
+		}
 	}
 	if err := a.makeRun(); err != nil {
 		return err
@@ -102,7 +178,7 @@ func runAudit(ctx context.Context, concurrency int, only, skip string, args []st
 	if err != nil {
 		return err
 	}
-	p.dim("wall %s with -c %d\n", duration(wall), concurrency)
+	p.dim("wall %s with -c %d\n", duration(wall), o.concurrency)
 	p.dim("report: %s\n", md)
 	p.dim("logs:   %s\n", a.logs)
 
@@ -172,25 +248,65 @@ func selectChecks(cfg *config, only, skip string) ([]*check, error) {
 	return checks, nil
 }
 
+// targets returns the package patterns in args as rebase does, or, when
+// args are Go files, the packages of their directories and the files,
+// relative to the module root. As with the go command, files and packages
+// do not mix.
+func targets(dir, root string, args []string) (pkgs, files []string, err error) {
+	var dirs []string
+	for _, arg := range args {
+		if !strings.HasSuffix(arg, ".go") {
+			continue
+		}
+		path := arg
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(dir, path)
+		}
+		if fi, err := os.Stat(path); err != nil || !fi.Mode().IsRegular() {
+			return nil, nil, usagef("%s: no such file", arg)
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil || !filepath.IsLocal(rel) {
+			return nil, nil, usagef("%s is outside the module in %s", arg, root)
+		}
+		files = append(files, filepath.ToSlash(rel))
+		dirs = append(dirs, filepath.Dir(path))
+	}
+	if len(files) == 0 {
+		pkgs, err := rebase(dir, root, args)
+		return pkgs, nil, err
+	}
+	if len(files) < len(args) {
+		return nil, nil, usagef("files and packages do not mix: name either, " +
+			"as with the go command")
+	}
+	slices.Sort(dirs)
+	pkgs, err = rebase(root, root, slices.Compact(dirs))
+	slices.Sort(files)
+	return pkgs, slices.Compact(files), err
+}
+
 // rebase returns the package patterns in args, which are relative to the
 // directory dir, as patterns relative to the module root, where the checks
 // run. Import paths stay as they are; no args stands for ./... in dir, as
-// with the go command.
+// with the go command. A pattern without ./ that names a directory of dir,
+// such as internal/store or internal/..., is taken for one with it, which
+// the go command does not do.
 func rebase(dir, root string, args []string) ([]string, error) {
 	if len(args) == 0 {
 		args = []string{"./..."}
 	}
 	var pkgs []string
 	for _, arg := range args {
-		if !isLocalPattern(arg) {
-			pkgs = append(pkgs, arg)
-			continue
-		}
 		path, dots := arg, ""
 		if p, ok := strings.CutSuffix(arg, "/..."); ok {
 			path, dots = p, "/..."
 		} else if p, ok := strings.CutSuffix(arg, "..."); ok {
 			path, dots = p, "..." // ./cmd... is cmd, cmdline and the like
+		}
+		if !isLocalPattern(arg) && !isDir(filepath.Join(dir, path)) {
+			pkgs = append(pkgs, arg)
+			continue
 		}
 		if !filepath.IsAbs(path) {
 			path = filepath.Join(dir, path)
@@ -206,6 +322,14 @@ func rebase(dir, root string, args []string) ([]string, error) {
 		pkgs = append(pkgs, "./"+filepath.ToSlash(rel)+dots)
 	}
 	return pkgs, nil
+}
+
+func isDir(path string) bool {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return fi.IsDir()
 }
 
 // isLocalPattern reports whether a package pattern is a directory rather
@@ -349,7 +473,7 @@ func (p *printer) paint(color, s string) string {
 
 func (p *printer) header(a *audit) {
 	_, _ = fmt.Fprintf(p.w, "%s %s\n", p.paint(bold, a.mod.path),
-		p.paint(dim, "· "+strings.Join(a.packages, " ")+" · "+a.mod.root))
+		p.paint(dim, "· "+a.label()+" · "+a.mod.root))
 }
 
 func (p *printer) name(width int, name string) {

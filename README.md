@@ -167,6 +167,23 @@ go-audit: a check whose program is missing is skipped, and its line says what
 to `go install`. The exit status is 0 when nothing was found, 1 when something
 was, and 2 when a check could not do its job, such as code that does not build.
 
+Files, tests and changes in git narrow the report, its scope:
+
+```sh
+go-audit internal/store/store.go       # the findings in these files
+go-audit -no-tests                     # all but those in _test.go files
+go-audit -staged                       # on the lines in the index
+go-audit -unstaged                     # on the lines changed since, and in new files
+go-audit -diff origin/master           # on the lines of the branch, committed or not
+go-audit -staged -whole-files          # anywhere in the staged files
+```
+
+The checks still run over the packages, `./...` by default, since most tools
+take nothing smaller and deadcode needs the whole program; the report keeps
+the findings in scope and the line of each check counts the rest. A scope with
+no Go file in it exits 0 with no report, so `go-audit -staged` can sit in a
+pre-commit hook.
+
 The checks are YAML, built into the binary as
 [go-audit.yml](go-audit/go-audit.yml), beside
 [golangci.yml](go-audit/golangci.yml), the config of golangci-lint for its
