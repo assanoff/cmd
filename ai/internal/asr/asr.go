@@ -46,7 +46,9 @@ type Engine struct {
 // New installs whatever is missing and loads the model. The SDK picks a
 // whisper.cpp bundle for this machine, downloads it and the model into
 // ~/.kronk if they are not there yet, and reports progress through log.
-func New(ctx context.Context, name string, log bucky.Logger, report *cli.Printer) (*Engine, error) {
+// threads is the CPU threads whisper.cpp decodes with; see
+// config.DefaultASRThreads for why it is always set.
+func New(ctx context.Context, name string, threads int, log bucky.Logger, report *cli.Printer) (*Engine, error) {
 	lib, err := buckylibs.New(buckylibs.WithDetect(ctx, log))
 	if err != nil {
 		return nil, cli.NotSetupf("selecting whisper libraries: %w", err)
@@ -77,6 +79,7 @@ func New(ctx context.Context, name string, log bucky.Logger, report *cli.Printer
 	b, err := bucky.New(
 		bmodel.WithModelPath(mp.ModelFiles[0]),
 		bmodel.WithUseGPU(true),
+		bmodel.WithNThreads(int32(threads)),
 		bmodel.WithLog(log),
 	)
 	if err != nil {

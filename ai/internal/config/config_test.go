@@ -244,6 +244,29 @@ func TestIntReadsANumber(t *testing.T) {
 	}
 }
 
+// An empty AI_ASR_THREADS, which is how the deployed config ships, means the
+// default and is not a typo worth a warning.
+func TestASRThreadsEmptyIsTheDefault(t *testing.T) {
+	withConfig(t, "AI_ASR_THREADS=\n")
+	t.Setenv("AI_ASR_THREADS", "")
+
+	got := ASRThreads(func(string, ...any) {
+		t.Error("ASRThreads warned about an empty value")
+	})
+	if want := DefaultASRThreads(); got != want {
+		t.Errorf("ASRThreads = %d, want the default %d", got, want)
+	}
+}
+
+func TestASRThreadsReadsTheFile(t *testing.T) {
+	withConfig(t, "AI_ASR_THREADS=6\n")
+	t.Setenv("AI_ASR_THREADS", "")
+
+	if got := ASRThreads(func(string, ...any) {}); got != 6 {
+		t.Errorf("ASRThreads = %d, want 6 from the file", got)
+	}
+}
+
 // Every role in the table must have a fallback chain, or Resolve silently
 // treats its name as a model id and Kronk fails much later with a worse
 // message.

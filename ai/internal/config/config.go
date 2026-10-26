@@ -14,6 +14,7 @@ import (
 	"bufio"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -45,6 +46,22 @@ func Int(key string, deflt int, warn func(format string, args ...any)) int {
 		return deflt
 	}
 	return n
+}
+
+// DefaultASRThreads is how many CPU threads whisper.cpp decodes with when
+// AI_ASR_THREADS does not say. Left unset, the SDK falls back to whisper.cpp's
+// own default of at most four, which on a many-core machine leaves most of it
+// idle for hours: on Windows there is no GPU bundle for anything but CUDA, so
+// the CPU is all whisper gets. Taking every core instead would freeze the
+// desktop for the whole run, so two stay free for everything else.
+func DefaultASRThreads() int {
+	return max(1, runtime.NumCPU()-2)
+}
+
+// ASRThreads is AI_ASR_THREADS, or DefaultASRThreads when it is unset or not a
+// positive number. A --threads flag, where there is one, comes before this.
+func ASRThreads(warn func(format string, args ...any)) int {
+	return Int("AI_ASR_THREADS", DefaultASRThreads(), warn)
 }
 
 var (

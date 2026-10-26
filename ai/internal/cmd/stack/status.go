@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"text/tabwriter"
 
@@ -40,6 +41,10 @@ func (c *statusCommand) Execute(args []string) error {
 	if path, ok := config.RepoPath(); ok {
 		fmt.Printf("repo       %s\n", path)
 	}
+	// Whisper on the CPU is only as fast as the threads it is given, so the
+	// count goes next to the number it is taken from.
+	fmt.Printf("cpu        %d logical, ai hear uses %d threads\n",
+		runtime.NumCPU(), config.ASRThreads(printer(false).Printf))
 
 	fmt.Println("\nlibraries")
 	printLibs(c.ctx)

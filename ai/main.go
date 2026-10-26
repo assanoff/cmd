@@ -115,7 +115,7 @@ type subcommand struct {
 
 func subcommands(ctx context.Context) []subcommand {
 	return []subcommand{
-		{"hear", hear.Short, hear.Long, hear.New(ctx)},
+		{"hear", hear.Short, hear.Long(), hear.New(ctx)},
 		{"ask", ask.Short, ask.Long, ask.New(ctx)},
 		{"sum", sum.Short, sum.Long, sum.New(ctx)},
 		{"tr", tr.Short, tr.Long, tr.New(ctx)},

@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -24,7 +25,7 @@ const Name = "ai hear"
 
 const (
 	Short = "Transcribe speech to text"
-	Long  = `Transcribes speech to text with whisper.cpp.
+	long  = `Transcribes speech to text with whisper.cpp.
 
 With no file arguments hear reads standard input and writes the transcript to
 standard output. Anything ffmpeg can read is accepted; -f srt carries the
@@ -32,6 +33,32 @@ times, which is what lets the rest of the pipeline keep them:
 
     ai hear -f srt lecture.mkv | ai sum -s chapters`
 )
+
+// Long is the help text. It ends with this machine's CPUs and the thread count
+// a run would take from them, so --threads is chosen against the real number
+// rather than a guess; a struct tag has to be a literal and cannot say it.
+//
+// Every run of ai builds this text, whatever the subcommand, so a bad
+// AI_ASR_THREADS is reported in it rather than on standard error: ai sum has
+// no business warning about a whisper setting.
+func Long() string {
+	var bad string
+	n := config.ASRThreads(func(format string, args ...any) {
+		bad = fmt.Sprintf(format, args...)
+	})
+	from := "every core but two, the default"
+	switch {
+	case bad != "":
+		from = bad + ", so the default"
+	case config.Value("AI_ASR_THREADS") != "":
+		from = "set by AI_ASR_THREADS"
+	}
+	return fmt.Sprintf(`%s
+
+This machine has %d logical CPUs; whisper decodes with %d threads (%s).
+--threads N changes it for one run, AI_ASR_THREADS in the config for all.`,
+		long, runtime.NumCPU(), n, from)
+}
 
 // Command is the subcommand's flags.
 //
@@ -42,14 +69,15 @@ times, which is what lets the rest of the pipeline keep them:
 type Command struct {
 	ctx context.Context
 
-	Model  string `short:"m" long:"model" value-name:"NAME" description:"a role (asr, asr-fast) or an explicit whisper model (large-v3-turbo, base.en)"`
-	Lang   string `short:"l" long:"lang" value-name:"CODE" description:"language hint such as ru or en; empty autodetects"`
-	Format string `short:"f" long:"format" default:"text" choice:"text" choice:"json" choice:"srt" choice:"vtt" description:"output format"` //nolint:staticcheck // go-flags takes one choice tag per allowed value; SA5008 reads the repeat as a mistake
-	Prompt string `short:"p" long:"prompt" value-name:"TEXT" description:"seed the decoder with prior context: terminology, names, acronyms"`
-	Xlate  bool   `short:"t" long:"translate" description:"translate the speech to English (whisper translates only into English)"`
-	Words  bool   `long:"words" description:"include word-level timestamps (json and vtt)"`
-	Exts   string `long:"ext" default:"mp3,mp4,wav,m4a,flac,ogg,opus,mkv,avi,mov,wmv,flv,webm,m4v,mpg,mpeg,aac" description:"comma-separated extensions to accept when walking directories"`
-	Suffix string `long:"suffix" value-name:"S" description:"append this to each output base name"`
+	Model   string `short:"m" long:"model" value-name:"NAME" description:"a role (asr, asr-fast) or an explicit whisper model (large-v3-turbo, base.en)"`
+	Lang    string `short:"l" long:"lang" value-name:"CODE" description:"language hint such as ru or en; empty autodetects"`
+	Format  string `short:"f" long:"format" default:"text" choice:"text" choice:"json" choice:"srt" choice:"vtt" description:"output format"` //nolint:staticcheck // go-flags takes one choice tag per allowed value; SA5008 reads the repeat as a mistake
+	Prompt  string `short:"p" long:"prompt" value-name:"TEXT" description:"seed the decoder with prior context: terminology, names, acronyms"`
+	Xlate   bool   `short:"t" long:"translate" description:"translate the speech to English (whisper translates only into English)"`
+	Words   bool   `long:"words" description:"include word-level timestamps (json and vtt)"`
+	Exts    string `long:"ext" default:"mp3,mp4,wav,m4a,flac,ogg,opus,mkv,avi,mov,wmv,flv,webm,m4v,mpg,mpeg,aac" description:"comma-separated extensions to accept when walking directories"`
+	Suffix  string `long:"suffix" value-name:"S" description:"append this to each output base name"`
+	Threads int    `long:"threads" value-name:"N" description:"CPU threads for whisper; defaults to $AI_ASR_THREADS, else every core but two"`
 
 	cli.Batch
 
@@ -89,7 +117,7 @@ func (c *Command) Execute([]string) error {
 
 	model := config.Resolve(c.Model, config.RoleASR)
 	if c.DryRun {
-		c.describe(jobs, model)
+		c.describe(jobs, model, c.threads(p))
 		return nil
 	}
 
@@ -103,7 +131,7 @@ func (c *Command) Execute([]string) error {
 		return nil
 	}
 
-	eng, err := asr.New(c.ctx, model, p.Logger(), p)
+	eng, err := asr.New(c.ctx, model, c.threads(p), p.Logger(), p)
 	if err != nil {
 		return err
 	}
@@ -177,10 +205,20 @@ func (c *Command) options(p *cli.Printer) asr.Options {
 	return o
 }
 
+// threads is how many CPU threads whisper decodes with: the flag, then the
+// config, then the default.
+func (c *Command) threads(p *cli.Printer) int {
+	if c.Threads > 0 {
+		return c.Threads
+	}
+	return config.ASRThreads(p.Printf)
+}
+
 // describe prints what a run would do. This is the payload of -n, so it goes
 // to standard output.
-func (c *Command) describe(jobs []walk.Job, model string) {
-	fmt.Printf("model  %s\n", model)
-	fmt.Printf("format %s\n", c.Format)
+func (c *Command) describe(jobs []walk.Job, model string, threads int) {
+	fmt.Printf("model   %s\n", model)
+	fmt.Printf("format  %s\n", c.Format)
+	fmt.Printf("threads %d\n", threads)
 	cli.PrintPlan(jobs)
 }
