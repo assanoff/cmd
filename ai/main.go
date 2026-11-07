@@ -19,6 +19,7 @@ import (
 	"github.com/assanoff/cmd/ai/internal/cli"
 	"github.com/assanoff/cmd/ai/internal/cmd/ask"
 	"github.com/assanoff/cmd/ai/internal/cmd/hear"
+	"github.com/assanoff/cmd/ai/internal/cmd/seek"
 	"github.com/assanoff/cmd/ai/internal/cmd/stack"
 	"github.com/assanoff/cmd/ai/internal/cmd/sum"
 	"github.com/assanoff/cmd/ai/internal/cmd/tr"
@@ -62,9 +63,11 @@ func run(ctx context.Context, args []string) int {
 		return fatal(err)
 	}
 	for _, c := range subcommands(ctx) {
-		if _, err := parser.AddCommand(c.name, c.short, c.long, c.data); err != nil {
+		cmd, err := parser.AddCommand(c.name, c.short, c.long, c.data)
+		if err != nil {
 			return fatal(err)
 		}
+		cmd.SubcommandsOptional = c.verb
 	}
 
 	rest, err := parser.ParseArgs(args)
@@ -111,18 +114,23 @@ type subcommand struct {
 	short string
 	long  string
 	data  any
+
+	// verb marks a group that does something of its own when none of its
+	// subcommands is named: "ai seek <query>" searches.
+	verb bool
 }
 
 func subcommands(ctx context.Context) []subcommand {
 	return []subcommand{
-		{"hear", hear.Short, hear.Long(), hear.New(ctx)},
-		{"ask", ask.Short, ask.Long, ask.New(ctx)},
-		{"sum", sum.Short, sum.Long, sum.New(ctx)},
-		{"tr", tr.Short, tr.Long, tr.New(ctx)},
-		{"stack", stack.Short, stack.Long, stack.New(ctx)},
+		{"hear", hear.Short, hear.Long(), hear.New(ctx), false},
+		{"ask", ask.Short, ask.Long, ask.New(ctx), false},
+		{"sum", sum.Short, sum.Long, sum.New(ctx), false},
+		{"tr", tr.Short, tr.Long, tr.New(ctx), false},
+		{"seek", seek.Short, seek.Long, seek.New(ctx), true},
+		{"stack", stack.Short, stack.Long, stack.New(ctx), false},
 		// A pointer, like every other entry: go-flags scans the struct by
 		// reflection and refuses a value.
-		{"version", "Print the ai and Kronk SDK versions", versionLong, &versionCommand{}},
+		{"version", "Print the ai and Kronk SDK versions", versionLong, &versionCommand{}, false},
 	}
 }
 

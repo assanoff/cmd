@@ -7,7 +7,7 @@ command never drags in another's dependencies.
 
 | Command | What it does |
 | ------- | ------------ |
-| [ai](ai) | Transcribe, prompt, summarize and translate with local models |
+| [ai](ai) | Transcribe, prompt, summarize, translate and search recordings with local models |
 | [radio](radio) | Publish a directory of audio as a podcast feed |
 | [chapters](chapters) | Write a timecoded tracklist into an audio file |
 | [go-audit](go-audit) | Run the Go linters and checkers over a module, keep and browse the reports |
@@ -43,6 +43,7 @@ ai hear    transcribe speech to text
 ai ask     run one prompt against a local language model
 ai sum     summarize text, map-reduce over long input
 ai tr      translate text
+ai seek    find where something was said in audio and video
 ai stack   install and maintain the local model stack
 ```
 
@@ -66,6 +67,24 @@ Given file or directory arguments they process those instead, loading the model
 once for the whole batch. Roles (`fast`, `smart`, `asr`, ...) map to concrete
 model names through `~/.config/ai/config`, so nothing hard-codes a model.
 
+`ai seek` turns a folder of recordings into something you can search by what
+was said — "talked about taxes" finds the minute where taxes came up, in
+whichever episode and whichever language it was:
+
+```sh
+ai seek index -r ~/podcasts       # transcribe and index, once
+ai seek "talked about taxes"      # times and files, best first
+ai seek "про налоги" -f json      # the same for a script
+ai seek web                       # in a browser, with a player at the moment
+```
+
+A file with a transcript beside it (`ai hear -f srt`) is not transcribed again.
+The index is one SQLite file, `~/.local/share/ai/seek.db` unless `--db` or
+`AI_SEEK_DB` says otherwise: sqlite-vec holds a vector per minute of speech and
+FTS5 its words, so a search finds both what was meant and the exact names and
+terms. Both come from modernc.org's CGo-free builds, so `ai` still needs no C
+compiler.
+
 ```sh
 ai stack install          # libraries plus every model a role names
 ai stack status           # what is installed, what each role resolves to
@@ -86,8 +105,9 @@ ai/
     asr/                  the Bucky engine — every speech model does
     config/               ~/.config/ai/config and the role table
     chunk/  subs/  walk/  prompt/
+    index/                the seek index: SQLite, sqlite-vec and FTS5
     cmd/
-      ask/  hear/  sum/  tr/  stack/
+      ask/  hear/  sum/  tr/  seek/  stack/
 ```
 
 This was five commands in five modules before (`ai-ask`, `ai-hear`, `ai-sum`,

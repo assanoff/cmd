@@ -26,6 +26,11 @@ const (
 // answers.
 const DefaultFast = "unsloth/Qwen3-1.7B-UD-Q8_K_XL"
 
+// DefaultEmbed is what ai seek embeds with when the config says nothing. It is
+// multilingual, which a Russian transcript needs, and at 640 MB it fits beside
+// a whisper model on a small GPU.
+const DefaultEmbed = "Qwen/Qwen3-Embedding-0.6B-Q8_0"
+
 // Backend says which native runtime a model needs. The two have separate
 // library bundles and separate model stores, and mixing them up is the classic
 // mistake here: KRONK_LIB_PATH does not select whisper.cpp, and a whisper model
@@ -59,7 +64,7 @@ var Roles = []Role{
 	{RoleSmart, "AI_MODEL_SMART", BackendLlama, ""},
 	{RoleDeep, "AI_MODEL_DEEP", BackendLlama, ""},
 	{RoleCode, "AI_MODEL_CODE", BackendLlama, ""},
-	{RoleEmbed, "AI_MODEL_EMBED", BackendLlama, ""},
+	{RoleEmbed, "AI_MODEL_EMBED", BackendLlama, DefaultEmbed},
 	{RoleASR, "AI_ASR_MODEL", BackendWhisper, "large-v3-turbo"},
 	{RoleASRFast, "AI_ASR_MODEL_FAST", BackendWhisper, "base"},
 }

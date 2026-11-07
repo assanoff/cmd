@@ -124,6 +124,20 @@ func Dir() string {
 	return filepath.Join(home, ".config")
 }
 
+// DataDir is where ai keeps what it builds rather than what it is told:
+// $XDG_DATA_HOME, or ~/.local/share. Like Dir it ignores the macOS
+// convention, so the two stay side by side on every system.
+func DataDir() string {
+	if dir := os.Getenv("XDG_DATA_HOME"); dir != "" {
+		return dir
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".local", "share")
+}
+
 // RepoPath locates the config inside the dev-env repository, which is the file
 // worth editing: deploy copies env/.config/* over $XDG_CONFIG_HOME with rm -rf
 // first, so a change made to the deployed copy is lost on the next deploy. The

@@ -15,6 +15,7 @@ The commands are:
 	ask     run one prompt against a local language model
 	sum     summarize text, map-reduce over long input
 	tr      translate text
+	seek    find where something was said in audio and video
 	stack   install and maintain the local model stack
 
 Run "ai <command> -h" for a command's own flags, and "ai stack <command> -h"
@@ -49,6 +50,30 @@ layout preserved. In that batch mode standard output carries the resulting
 paths, one per line. Existing files are skipped unless --force is given, so
 re-running an interrupted batch only does what is left. Use -n to print the
 plan and exit without asking a model anything.
+
+# Searching recordings
+
+seek indexes media once and then finds the places where something was said,
+by meaning as well as by words:
+
+	ai seek index -r ~/podcasts
+	ai seek "talked about taxes"
+	ai seek "про налоги" -f json -n 5
+	ai seek web
+
+index uses the transcript beside a file when "ai hear -f srt" left one there,
+and runs whisper when it did not. Each transcript is cut into minute-long
+overlapping passages, embedded by the model of the embed role, and stored in
+one SQLite file with sqlite-vec for the vectors and FTS5 for the words; both
+are the CGo-free builds from modernc.org. A search merges the passages nearest
+to the query with those that share its words, and prints each as a file and
+the time in it: not the start of the passage but the ten seconds of it nearest
+the query, whose vectors were stored beside the passages'. web serves the same search on localhost, with a player that opens at the
+moment found.
+
+An index belongs to the embedding model that built it: a search loads that
+model whatever the embed role says now, and index refuses to add vectors from
+another one.
 
 # Models
 
@@ -92,6 +117,7 @@ the SDK are in one place each:
 	internal/config    ~/.config/ai/config and the role table
 	internal/chunk     token-aware splitting
 	internal/subs      SubRip and WebVTT
+	internal/index     the seek index: transcripts, passages, vectors, words
 	internal/walk      arguments to jobs, and where each result goes
 	internal/prompt    prompt templates and the language table
 	internal/cmd/*     one package per subcommand: flags and control flow

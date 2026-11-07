@@ -1,0 +1,115 @@
+{{define "head"}}<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.}}</title>
+<script src="/static/htmx.min.js"></script>
+<style>
+:root { --bg: #fff; --fg: #1b1b1b; --muted: #6b6b6b; --line: #e6e6e6; --accent: #0b62d6; --now: #fff1a8; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #151515; --fg: #e6e6e6; --muted: #9a9a9a; --line: #2b2b2b; --accent: #7aafff; --now: #3d3620; }
+}
+* { box-sizing: border-box; }
+body { margin: 0 auto; max-width: 52rem; padding: 1.5rem 1rem 4rem; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, sans-serif; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+header { margin-bottom: 1rem; }
+header a { color: var(--fg); font-weight: 600; }
+h1 { font-size: 1.4rem; margin: 0 0 .25rem; overflow-wrap: anywhere; }
+input[type=search] { width: 100%; padding: .7rem .9rem; font: inherit; font-size: 1.1rem; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: .5rem; }
+ol, ul { list-style: none; padding: 0; margin: 1rem 0; }
+.hit { padding: .75rem 0; border-bottom: 1px solid var(--line); }
+.hit p { margin: .25rem 0 0; }
+.when { font-family: ui-monospace, monospace; font-variant-numeric: tabular-nums; margin-right: .6rem; }
+.muted, .path { color: var(--muted); }
+.path { font-size: .85rem; overflow-wrap: anywhere; }
+.files li { padding: .2rem 0; }
+video, audio { width: 100%; margin: 1rem 0; }
+video { max-height: 60vh; background: #000; }
+.transcript li { padding: .15rem .35rem; border-radius: .3rem; }
+.transcript li.now { background: var(--now); }
+.htmx-indicator { opacity: 0; transition: opacity .2s; }
+.htmx-request.htmx-indicator { opacity: 1; }
+</style>
+</head>
+<body>
+<header><a href="/">ai seek</a></header>
+{{end}}
+
+{{define "page"}}{{template "head" "ai seek"}}
+<form action="/search" method="get" role="search">
+<input type="search" name="q" value="{{.Query}}" placeholder="They talked about this" autofocus autocomplete="off"
+  hx-get="/search" hx-trigger="input changed delay:400ms, search" hx-target="#results"
+  hx-push-url="true" hx-sync="this:replace" hx-indicator="#busy">
+</form>
+<p id="busy" class="htmx-indicator muted">searching…</p>
+<div id="results">{{template "results" .}}</div>
+</body>
+</html>
+{{end}}
+
+{{define "results"}}
+{{- if not .Query}}
+<p class="muted">{{len .Files}} file(s) indexed</p>
+<ul class="files">{{range .Files}}
+<li><a href="/media/{{.ID}}">{{.Title}}</a> <span class="muted">{{.Duration}}</span></li>{{end}}
+</ul>
+{{- else if .Error}}
+<p class="muted">{{.Error}}</p>
+{{- else if not .Hits}}
+<p class="muted">Nothing found.</p>
+{{- else}}
+<ol class="hits">{{range .Hits}}
+<li class="hit">
+<a class="when" href="/media/{{.MediaID}}?t={{.Sec}}">{{.Clock}}</a><a href="/media/{{.MediaID}}?t={{.Sec}}">{{.Title}}</a>
+<p>{{.Text}}</p>
+</li>{{end}}
+</ol>
+{{- end}}
+{{end}}
+
+{{define "media"}}{{template "head" .Title}}
+<h1>{{.Title}}</h1>
+<div class="path">{{.Path}} · {{.Duration}}</div>
+{{if .Video}}<video id="player" controls preload="metadata" src="/file/{{.ID}}#t={{.Start}}"></video>
+{{else}}<audio id="player" controls preload="metadata" src="/file/{{.ID}}#t={{.Start}}"></audio>{{end}}
+<ol class="transcript">{{range .Segments}}
+<li data-t="{{.Sec}}"><a class="when" href="?t={{.Sec}}">{{.Clock}}</a>{{.Text}}</li>{{end}}
+</ol>
+<script>
+(() => {
+  const player = document.getElementById("player");
+  const lines = [...document.querySelectorAll(".transcript li")];
+  let now = null;
+
+  // mark highlights the line being spoken at t, and brings it into view when
+  // asked: on opening at a found moment, not while the recording plays on.
+  const mark = (t, scroll) => {
+    let line = null;
+    for (const li of lines) {
+      if (Number(li.dataset.t) > t) break;
+      line = li;
+    }
+    if (line === now) return;
+    now?.classList.remove("now");
+    now = line;
+    now?.classList.add("now");
+    if (scroll) now?.scrollIntoView({ block: "center" });
+  };
+
+  document.querySelector(".transcript").addEventListener("click", (e) => {
+    const a = e.target.closest("a.when");
+    if (!a) return;
+    e.preventDefault();
+    player.currentTime = Number(a.parentElement.dataset.t);
+    player.play();
+    history.replaceState(null, "", a.href);
+  });
+  player.addEventListener("timeupdate", () => mark(player.currentTime, false));
+  mark({{.Start}}, true);
+})();
+</script>
+</body>
+</html>
+{{end}}

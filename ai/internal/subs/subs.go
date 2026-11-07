@@ -158,6 +158,24 @@ func (c Cue) Start() (time.Duration, bool) {
 	return 0, false
 }
 
+// End reads the cue's end time out of its timing line. WebVTT may follow the
+// time with cue settings ("00:01.000 --> 00:04.000 align:start"), so only the
+// first field after the arrow is the time.
+func (c Cue) End() (time.Duration, bool) {
+	for _, line := range c.Header {
+		if !isTiming(line) {
+			continue
+		}
+		_, rest, _ := strings.Cut(line, "-->")
+		fields := strings.Fields(rest)
+		if len(fields) == 0 {
+			return 0, false
+		}
+		return ParseStamp(fields[0])
+	}
+	return 0, false
+}
+
 // ParseStamp reads HH:MM:SS,mmm and the WebVTT spellings of the same thing:
 // the separator may be a comma or a period, the milliseconds may be missing,
 // and the hours may be missing.

@@ -135,3 +135,23 @@ Hello there.
 		t.Errorf("got text %q", cues[0].Text)
 	}
 }
+
+// A WebVTT timing line may carry cue settings after the end time; they are not
+// part of it.
+func TestCueEnd(t *testing.T) {
+	for _, tc := range []struct {
+		timing string
+		want   time.Duration
+	}{
+		{"00:00:01,000 --> 00:00:04,250", 4250 * time.Millisecond},
+		{"00:01.000 --> 01:02.500 align:start position:10%", 62500 * time.Millisecond},
+	} {
+		got, ok := Cue{Header: []string{tc.timing}}.End()
+		if !ok || got != tc.want {
+			t.Errorf("End of %q = %v, %v; want %v", tc.timing, got, ok, tc.want)
+		}
+	}
+	if _, ok := (Cue{Header: []string{"1"}}).End(); ok {
+		t.Error("End found a time in a cue with no timing line")
+	}
+}
