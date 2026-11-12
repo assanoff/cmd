@@ -11,6 +11,7 @@ command never drags in another's dependencies.
 | [radio](radio) | Publish a directory of audio as a podcast feed |
 | [chapters](chapters) | Write a timecoded tracklist into an audio file |
 | [go-audit](go-audit) | Run the Go linters and checkers over a module, keep and browse the reports |
+| [dupes](dupes) | Find duplicate files and directories across disks; report, never delete |
 
 ## Install
 
@@ -248,6 +249,35 @@ the store and the modules its reports name.
 `go doc github.com/assanoff/cmd/go-audit@latest` has the rest: every format,
 the substitutions a command may use, the layout of the store and the fields of
 the JSON.
+
+## dupes
+
+`dupes` finds duplicate files and whole duplicate directories across disks
+and reports them. It deletes nothing. A scan records the files in a SQLite
+database (`~/.local/share/dupes/dupes.db`, or `-db`), and the other commands
+report from it, as often and as narrowly as needed:
+
+```sh
+go install github.com/assanoff/cmd/dupes@latest
+
+dupes scan D:\ E:\Backup               # record, then hash what may be copies
+dupes files                            # top 10 groups by space to reclaim
+dupes files -n 100 -ext mp4,mkv -min 1G
+dupes dirs                             # directories holding the same files
+dupes dirs -by name -similar 0.9       # same-named ones that nearly do
+dupes files -n 0 -o dupes.csv          # everything, as CSV; .json for JSON
+dupes stats
+```
+
+A scan reads as little as it can: a file whose size is unique is never
+opened, files of a shared size have their ends hashed first, and only those
+whose ends match too are hashed whole. Scanning a path again reads only what
+changed. Files compare `-by hash`, `name` or `namesize`; directories `-by
+content` — the same files below them, whatever the names inside — or `-by
+name`, the same-named pairs that share most of what they hold. Subcommands are
+[google/subcommands](https://github.com/google/subcommands); SQLite is
+modernc.org's CGo-free build. `go doc github.com/assanoff/cmd/dupes@latest`
+has the rest.
 
 ## Versioning
 
