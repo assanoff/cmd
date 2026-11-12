@@ -13,6 +13,8 @@ Usage:
 	dupes dirs  [-by content|name] [-similar share] [-min size]
 	            [-n count] [-f text|csv|json] [-o file] [path...]
 	dupes stats
+	dupes forget path...
+	dupes reset
 	dupes version
 
 Every command takes -db, the database file. It never deletes, moves or
@@ -101,6 +103,16 @@ skipped: comparing every pair of them is slow and says little.
 format: text for reading, csv with one row per file or directory, json as an
 array of groups. -o writes to a file instead, and its extension picks the
 format unless -f does.
+
+# Forgetting
+
+forget drops a disk or a directory from the database, files and scanned
+paths alike, and compares what is left again; the path need not exist any
+more. reset deletes the database file itself, to start over. Neither touches
+a file on the disks.
+
+	dupes forget E:/          # the disk that was sold
+	dupes reset               # everything
 
 # Limits
 

@@ -11,6 +11,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -267,4 +268,78 @@ func rel(groups [][]string, root string) [][]string {
 
 func equal(got, want [][]string, root string) bool {
 	return slices.EqualFunc(rel(got, root), want, slices.Equal)
+}
+
+// A disk sold is gone from the disks before it is forgotten, so forget has
+// to find the files of a path that no longer exists.
+func TestForget(t *testing.T) {
+	ctx := context.Background()
+	top := tree(t, map[string][]byte{
+		"c/v.bin":     noise(4, 300<<10),
+		"e/v.bin":     noise(4, 300<<10),
+		"e/old/w.bin": noise(5, 300<<10),
+		"c/w.bin":     noise(5, 300<<10),
+	})
+	db := filepath.Join(t.TempDir(), "dupes.db")
+	c, e := filepath.Join(top, "c"), filepath.Join(top, "e")
+	scan(t, db, c)
+	scan(t, db, e)
+	if got := fileGroups(t, db, "hash"); len(got) != 2 {
+		t.Fatalf("before forget: %q", rel(got, top))
+	}
+
+	f := &forgetCmd{db: db}
+	if err := f.run(ctx, []string{filepath.Join(e, "old")}); err != nil {
+		t.Fatal(err)
+	}
+	if got := fileGroups(t, db, "hash"); len(got) != 1 {
+		t.Errorf("after forgetting e/old: %q, want c/v.bin and e/v.bin", rel(got, top))
+	}
+
+	if err := os.RemoveAll(e); err != nil {
+		t.Fatal(err)
+	}
+	// Typed in another case, as Windows lets one: the case is the database's.
+	typed := e
+	if runtime.GOOS == "windows" {
+		typed = strings.ToUpper(e)
+	}
+	if err := f.run(ctx, []string{typed}); err != nil {
+		t.Fatal(err)
+	}
+	if got := fileGroups(t, db, "hash"); len(got) != 0 {
+		t.Errorf("after forgetting e: %q, want no groups", rel(got, top))
+	}
+	sql, err := openDB(db, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = sql.Close() }()
+	roots, err := listRoots(ctx, sql)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roots) != 1 || roots[0].path != c {
+		t.Errorf("roots after forget: %v, want only %s", roots, c)
+	}
+	if err := f.run(ctx, []string{e}); err == nil {
+		t.Error("forgetting a path twice did not say there was nothing to forget")
+	}
+}
+
+func TestReset(t *testing.T) {
+	root := tree(t, map[string][]byte{"a": []byte("x")})
+	db := filepath.Join(t.TempDir(), "dupes.db")
+	scan(t, db, root)
+	if err := (&resetCmd{db: db}).run(); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []string{"", "-wal", "-shm"} {
+		if _, err := os.Stat(db + s); err == nil {
+			t.Errorf("%s is still there", db+s)
+		}
+	}
+	if err := (&resetCmd{db: db}).run(); err != nil {
+		t.Errorf("reset without a database: %v", err)
+	}
 }

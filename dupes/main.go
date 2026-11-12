@@ -32,6 +32,8 @@ func main() {
 	cdr.Register(&filesCmd{}, "")
 	cdr.Register(&dirsCmd{}, "")
 	cdr.Register(&statsCmd{}, "")
+	cdr.Register(&forgetCmd{}, "")
+	cdr.Register(&resetCmd{}, "")
 	cdr.Register(&versionCmd{}, "")
 	cdr.Register(cdr.HelpCommand(), "help")
 	cdr.Register(cdr.CommandsCommand(), "help")

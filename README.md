@@ -267,6 +267,8 @@ dupes dirs                             # directories holding the same files
 dupes dirs -by name -similar 0.9       # same-named ones that nearly do
 dupes files -n 0 -o dupes.csv          # everything, as CSV; .json for JSON
 dupes stats
+dupes forget E:/                       # drop a disk from the database
+dupes reset                            # delete the database, start over
 ```
 
 A scan reads as little as it can: a file whose size is unique is never
