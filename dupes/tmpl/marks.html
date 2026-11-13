@@ -1,0 +1,41 @@
+{{template "head" .}}{{with .P}}
+<h1>Marked to move</h1>
+<div class="stats">
+<div><b>{{.Total}}</b><span>files marked</span></div>
+<div><b>{{size .Bytes}}</b><span>to reclaim by moving them</span></div>
+</div>
+
+{{if $.RW}}
+<h2>Mark the copies under a path</h2>
+{{/* The answer is the whole page, of which main replaces this one's, so
+that the totals and the list follow the marking. */}}
+<form class="filters" action="/rule" method="post"
+	hx-post="/rule" hx-select="main" hx-target="main" hx-swap="outerHTML">
+<label class="wide">mark the files under
+<input name="from" value="{{.From}}" placeholder="E:\Backup" list="places" autocomplete="off" required></label>
+<label class="wide">that have a copy under, or anywhere if empty
+<input name="keep" value="{{.Keep}}" placeholder="D:\Photos" list="places" autocomplete="off"></label>
+{{template "places" $.Places}}
+<button type="submit">Mark</button>
+</form>
+{{with .Error}}<p class="error">{{.}}</p>{{end}}{{with .Msg}}<p class="msg">{{.}}</p>{{end}}
+
+<div class="actions">
+<button type="button" hx-post="/apply" hx-vals='{"dry": "1"}' hx-target="#job" hx-swap="outerHTML"
+	title="check every mark as Move would, without reading or moving a file">Check</button>
+<button type="button" class="go" hx-post="/apply" hx-target="#job" hx-swap="outerHTML"
+	hx-confirm="Move {{.Total}} marked files into the .dupes-trash of their disks? Each is read and compared again first; History moves them back."
+	{{if not .Total}}disabled{{end}}>Move to .dupes-trash</button>
+<button type="button" hx-post="/unmark-all" hx-select="main" hx-target="main" hx-swap="outerHTML"
+	hx-confirm="Take back every mark?" {{if not .Total}}disabled{{end}}>Unmark all</button>
+</div>
+{{else}}
+<p class="meta">Marking is off: run <code>dupes web -rw</code> to mark files here and move them, or use <code>dupes mark</code> and <code>dupes apply</code>.</p>
+{{end}}
+{{template "job" .Job}}
+
+{{if .Rows}}<table class="list marks">
+<tr><th class="num">size</th><th>file, and the copy kept</th><th></th></tr>
+{{template "mrows" .}}</table>
+{{else}}<p class="none">Nothing is marked. Mark files in the groups on Files and Directories{{if $.RW}}, or by path above{{end}}.</p>{{end}}
+{{end}}{{template "foot" .}}

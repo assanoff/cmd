@@ -11,7 +11,7 @@ command never drags in another's dependencies.
 | [radio](radio) | Publish a directory of audio as a podcast feed |
 | [chapters](chapters) | Write a timecoded tracklist into an audio file |
 | [go-audit](go-audit) | Run the Go linters and checkers over a module, keep and browse the reports |
-| [dupes](dupes) | Find duplicate files and directories across disks; report, never delete |
+| [dupes](dupes) | Find duplicate files and directories across disks; move the extra copies aside, never delete |
 
 ## Install
 
@@ -270,14 +270,23 @@ dupes stats
 dupes web                              # the same reports in a browser
 dupes forget E:/                       # drop a disk from the database
 dupes reset                            # delete the database, start over
+
+dupes mark E:\old                      # mark what in E:\old has a copy elsewhere
+dupes apply -dry-run                   # what would move, and what not and why
+dupes apply                            # move it into E:\.dupes-trash
+dupes history                          # what was moved; restore moves it back
+dupes web -rw                          # mark and move in the browser
 ```
 
 A scan reads as little as it can: a file whose size is unique is never
 opened, files of a shared size have their ends hashed first, and only those
 whose ends match too are hashed whole. Scanning a path again reads only what
-changed. Files compare `-by hash`, `name` or `namesize`; directories `-by
-content` — the same files below them, whatever the names inside — or `-by
-name`, the same-named pairs that share most of what they hold. Subcommands are
+changed. Cleaning up never deletes: `apply` moves each marked file into
+`.dupes-trash` on its own disk, after reading it and the copy that stays
+again, and `restore` moves it back. Files compare `-by hash`, `name` or
+`namesize`; directories `-by content` — the same files below them, whatever
+the names inside — or `-by name`, the same-named pairs that share most of what
+they hold. Subcommands are
 [google/subcommands](https://github.com/google/subcommands); SQLite is
 modernc.org's CGo-free build. `go doc github.com/assanoff/cmd/dupes@latest`
 has the rest.

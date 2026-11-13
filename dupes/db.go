@@ -44,7 +44,11 @@ create table if not exists files (
 	seen    integer not null
 );
 create index if not exists files_size on files(size, partial);
-create index if not exists files_hash on files(hash);
+-- size beside hash makes the index cover a grouping by hash: without it,
+-- grouping the files of a few disks reads the size of each from the table,
+-- a random read per file, and takes twenty seconds instead of half of one.
+drop index if exists files_hash;
+create index if not exists files_hash_size on files(hash, size);
 create index if not exists files_lname on files(lname, size);
 create index if not exists files_dir on files(dir);
 
@@ -57,6 +61,33 @@ create table if not exists dirs (
 );
 create index if not exists dirs_sig on dirs(sig);
 create index if not exists dirs_lname on dirs(lname);
+` + records
+
+// records are the tables of the cleaning up: the files marked to be moved
+// away, each with the copy of it that stays, and the files moved. They are
+// small, so every command creates them if a database made before them has
+// none; when they are there, which is always but once, that writes nothing.
+//
+// A file that keeps another is never marked itself: the marking keeps it so,
+// and apply checks it again before it moves anything.
+const records = `
+create table if not exists marks (
+	path   text primary key,
+	keep   text not null,
+	marked integer not null
+);
+create index if not exists marks_keep on marks(keep);
+
+create table if not exists removed (
+	id       integer primary key,
+	path     text not null,
+	keep     text not null,
+	size     integer not null,
+	hash     blob not null,
+	trash    text not null,
+	moved    integer not null,
+	restored integer
+);
 `
 
 // openDB opens the database at path. Only a scan creates one; the reports
@@ -91,9 +122,12 @@ func openDB(path string, create bool) (*sql.DB, error) {
 		// Only a scan brings the schema up to date — an index a newer dupes
 		// adds. Building one over a disk's files holds the write lock for
 		// longer than a scan running meanwhile waits for it, and a report
-		// does without the index, only slower.
+		// does without the index, only slower. The records are another
+		// matter: creating an empty table takes no time.
 		if create {
 			_, err = db.Exec(schema)
+		} else {
+			_, err = db.Exec(records)
 		}
 	default:
 		err = fmt.Errorf("schema version %d, this dupes knows %d: delete the file and scan again", v, schemaVersion)

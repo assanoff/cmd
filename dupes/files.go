@@ -94,6 +94,7 @@ type fileInfo struct {
 	Path     string    `json:"path"`
 	Size     int64     `json:"size"`
 	Modified time.Time `json:"modified"`
+	Marked   bool      `json:"-"` // for apply to move; only web shows it
 }
 
 func (c *filesCmd) run(ctx context.Context, args []string) error {

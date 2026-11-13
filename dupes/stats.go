@@ -107,6 +107,18 @@ type summary struct {
 }
 
 func summarize(ctx context.Context, db *sql.DB) (summary, error) {
+	s, err := summarizeFiles(ctx, db)
+	if err != nil {
+		return s, err
+	}
+	groups, err := contentGroups(ctx, db)
+	s.DirGroups = len(groups)
+	return s, err
+}
+
+// summarizeFiles is summarize without the directories, for a caller that
+// has their groups already.
+func summarizeFiles(ctx context.Context, db *sql.DB) (summary, error) {
 	var s summary
 	err := db.QueryRowContext(ctx, `
 		select count(*), coalesce(sum(size), 0), count(hash) from files`,
@@ -119,10 +131,5 @@ func summarize(ctx context.Context, db *sql.DB) (summary, error) {
 			select count(*) as n, sum(size) - max(size) as w from files
 			where hash is not null group by hash having n > 1)`,
 	).Scan(&s.Groups, &s.DupFiles, &s.Waste)
-	if err != nil {
-		return s, err
-	}
-	groups, err := contentGroups(ctx, db)
-	s.DirGroups = len(groups)
 	return s, err
 }

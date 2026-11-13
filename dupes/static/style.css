@@ -151,6 +151,41 @@ button.tag { cursor: pointer; }
 .crumbs { font-family: var(--mono); font-size: 14px; margin: 8px 0 4px; word-break: break-all; }
 .crumbs .sep { color: var(--muted); margin: 0 6px; }
 
+/* Cleaning up: the tools of a path, the marks, the list and the runs. */
+.tools { white-space: nowrap; }
+button.icon {
+	border: 0;
+	background: transparent;
+	padding: 0 3px;
+	font-size: 13px;
+	line-height: 1;
+	cursor: pointer;
+	opacity: 0.55;
+}
+button.icon:hover { opacity: 1; }
+button.icon.done { opacity: 1; color: var(--accent); }
+button.icon.done::after { content: " copied"; font-size: 11px; }
+td.acts { white-space: nowrap; text-align: right; }
+.toggle { white-space: nowrap; }
+tr:has(.toggle.on) td.path > a { text-decoration: line-through; color: var(--muted); }
+.kept { color: var(--muted); font-size: 12px; margin-top: 2px; }
+header .count {
+	font-size: 11px;
+	padding: 0 6px;
+	border-radius: 8px;
+	background: var(--dup-bg);
+	color: var(--waste);
+}
+header .mode { margin-left: auto; font-size: 12px; color: var(--waste); }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+button.go { background: var(--waste); border-color: var(--waste); color: var(--bg); }
+button:disabled { opacity: 0.4; cursor: default; }
+.msg { color: var(--accent); font-weight: 600; }
+#job p { margin: 8px 0; }
+#job .running::before { content: "◌ "; }
+tr.more td { text-align: center; padding: 10px; }
+table.list.marks { margin-top: 12px; }
+
 @media (max-width: 640px) {
 	header, main { padding-left: 16px; padding-right: 16px; }
 	.date { display: none; }

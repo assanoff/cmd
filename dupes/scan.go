@@ -189,7 +189,9 @@ func (w *walker) walk(ctx context.Context, root string) (walkStats, error) {
 			return nil
 		}
 		if d.IsDir() {
-			if path != root && match(w.exclude, d.Name()) {
+			// What apply moved away is not compared again: the copy it
+			// was moved for is what is left of it.
+			if path != root && (d.Name() == trashDir || match(w.exclude, d.Name())) {
 				return filepath.SkipDir
 			}
 			return nil

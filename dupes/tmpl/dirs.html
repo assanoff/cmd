@@ -11,7 +11,8 @@
 <label title="by name: the share of distinct files the two have in common">alike
 <input name="similar" value="{{.Form.Similar}}" size="4"></label>
 <label>at least <input name="min" value="{{.Form.Min}}" placeholder="1G" size="6"></label>
-<label class="wide">under <input name="under" value="{{.Form.Under}}" placeholder="D:\Backup"></label>
+<label class="wide">under <input name="under" value="{{.Form.Under}}" placeholder="D:\Backup" list="places" autocomplete="off"></label>
+{{template "places" $.Places}}
 <button type="submit">Show</button>
 </form>
 
@@ -20,6 +21,6 @@
 {{else}}<p class="meta">{{.Total}} {{if eq .Form.By "name"}}pairs{{else}}groups{{end}}
 · download <a href="{{.CSV}}">CSV</a> · <a href="{{.JSON}}">JSON</a></p>
 {{if eq .Form.By "name"}}{{if .Pairs}}<ol class="groups">{{template "pairs" .}}</ol>{{else}}<p class="none">No pairs that alike.</p>{{end}}
-{{else}}{{if .Groups}}<ol class="groups">{{template "dgroups" .}}</ol>{{else}}<p class="none">No duplicate directories.</p>{{end}}
+{{else}}{{if .Views}}<ol class="groups">{{template "dgroups" .}}</ol>{{else}}<p class="none">No duplicate directories.</p>{{end}}
 {{end}}{{end}}</div>
 {{end}}{{template "foot" .}}

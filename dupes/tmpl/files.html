@@ -20,7 +20,8 @@ Back, which htmx 4 serves by fetching the URL again, gets a page too. */}}
 </select></label>
 <label>extensions <input name="ext" value="{{.Form.Ext}}" placeholder="jpg,mp4" size="10"></label>
 <label>at least <input name="min" value="{{.Form.Min}}" placeholder="100M" size="6"></label>
-<label class="wide">under <input name="under" value="{{.Form.Under}}" placeholder="D:\Backup"></label>
+<label class="wide">under <input name="under" value="{{.Form.Under}}" placeholder="D:\Backup" list="places" autocomplete="off"></label>
+{{template "places" $.Places}}
 <button type="submit">Show</button>
 </form>
 

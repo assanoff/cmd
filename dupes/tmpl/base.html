@@ -9,6 +9,7 @@ hx-* attribute sits on the element that makes the request. */}}
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="/style.css">
 <script src="/htmx.min.js" defer></script>
+<script src="/dupes.js" defer></script>
 </head>
 <body>
 <header>
@@ -17,52 +18,78 @@ hx-* attribute sits on the element that makes the request. */}}
 <a href="/"{{if eq .Active "index"}} class="on"{{end}}>Overview</a>
 <a href="/files"{{if eq .Active "files"}} class="on"{{end}}>Files</a>
 <a href="/dirs"{{if eq .Active "dirs"}} class="on"{{end}}>Directories</a>
+<a href="/marks"{{if eq .Active "marks"}} class="on"{{end}}>Marked{{if .Marked}} <span class="count">{{.Marked}}</span>{{end}}</a>
+<a href="/history"{{if eq .Active "history"}} class="on"{{end}}>History</a>
 </nav>
+{{if .RW}}<span class="mode" title="dupes web -rw: marks files and moves them into .dupes-trash">marking on</span>{{end}}
 </header>
 <main>
 {{end}}
 
 {{define "foot"}}</main>
-<footer>{{.DB}} · nothing here deletes a file · after <code>dupes scan</code>, reload</footer>
+<footer>{{.DB}} · {{if .RW}}marked files are moved into .dupes-trash only by Move, and History moves them back{{else}}read only: dupes web -rw marks files{{end}} · nothing here deletes a file</footer>
 </body>
 </html>
+{{end}}
+
+{{/* The scanned paths and what is right below them, offered by the fields
+of a path. */}}
+{{define "places"}}<datalist id="places">
+{{range .}}<option value="{{.}}">
+{{end}}</datalist>
+{{end}}
+
+{{/* Copying a path and showing it in the file manager. */}}
+{{define "tools"}}<span class="tools"><button type="button" class="icon" data-copy="{{.}}" title="copy the path">⧉</button><button type="button" class="icon" hx-post="/open" hx-vals='{{vals "path" .}}' hx-swap="none" title="show in the file manager">📂</button></span>{{end}}
+
+{{/* The mark of a file, which replaces itself when clicked. A row with a
+marked file is crossed out by the style sheet. */}}
+{{define "toggle"}}<span class="toggle{{if .Marked}} on{{end}}">{{if .Marked}}<span class="tag dup">to move</span>{{if rw}} <button type="button" class="tag" hx-post="/mark" hx-vals='{{vals "path" .Path "on" "0"}}' hx-target="closest .toggle" hx-swap="outerHTML">unmark</button>{{end}}{{else if rw}}<button type="button" class="tag" hx-post="/mark" hx-vals='{{vals "path" .Path "on" "1"}}' hx-target="closest .toggle" hx-swap="outerHTML" title="mark it for Move; another copy is kept">mark</button>{{end}}{{if .Err}} <span class="error">{{.Err}}</span>{{end}}</span>{{end}}
+
+{{/* A group of files. Only copies by content can be marked. */}}
+{{define "fgroup"}}<li class="group">
+<div class="head">
+<span class="rank">{{.Rank}}</span>
+<b>{{.G.Count}} files</b>
+<span class="waste">{{size .G.Wasted}} to reclaim</span>
+<code class="key" title="{{.G.Key}}">{{short .G.Key}}</code>
+</div>
+<table class="files">
+{{range .G.Files}}<tr>
+<td class="num">{{size .Size}}</td>
+<td class="date">{{date .Modified}}</td>
+<td class="path"><a href="{{fileURL .Path}}">{{.Path}}</a></td>
+<td class="acts">{{template "tools" .Path}}{{if $.Hash}} {{template "toggle" (toggle .Path .Marked)}}{{if rw}} <button type="button" class="tag" hx-post="/keep" hx-vals='{{vals "path" .Path "rank" (itoa $.Rank)}}' hx-target="closest li" hx-swap="outerHTML" title="mark every other copy">keep only this</button>{{end}}{{end}}</td>
+</tr>
+{{end}}</table>
+</li>
 {{end}}
 
 {{/* The groups of files from .Offset on, and the button for the next ones,
 which replaces itself with them. Its href is the same as a page, for a
 browser without scripts. */}}
-{{define "fgroups"}}{{$off := .Offset}}{{range $i, $g := .Groups}}
-<li class="group">
+{{define "fgroups"}}{{$off := .Offset}}{{$by := .Form.By}}{{range $i, $g := .Groups}}
+{{template "fgroup" (fg (add 1 (add $off $i)) $g $by)}}{{end}}{{if .More}}<li class="more"><a class="button" href="{{.Next}}" hx-get="{{.More}}" hx-target="closest li" hx-swap="outerHTML">Show more</a></li>{{end}}
+{{end}}
+
+{{define "dgroup"}}<li class="group">
 <div class="head">
-<span class="rank">{{add 1 (add $off $i)}}</span>
-<b>{{$g.Count}} files</b>
-<span class="waste">{{size $g.Wasted}} to reclaim</span>
-<code class="key" title="{{$g.Key}}">{{short $g.Key}}</code>
+<span class="rank">{{.Rank}}</span>
+<b>{{len .G.Dirs}} copies</b>
+<span>of {{plural .G.Files "file"}}, {{size .G.Bytes}}</span>
+<span class="waste">{{size .G.Waste}} to reclaim</span>
 </div>
 <table class="files">
-{{range $g.Files}}<tr>
-<td class="num">{{size .Size}}</td>
-<td class="date">{{date .Modified}}</td>
-<td class="path"><a href="{{fileURL .Path}}">{{.Path}}</a></td>
+{{range .Rows}}<tr>
+<td class="path"><a href="{{dirURL .Path}}">{{.Path}}</a></td>
+<td class="acts">{{template "tools" .Path}}{{if .Marked}} <span class="tag dup">{{plural .Marked "file"}} to move, {{size .MarkedBytes}}</span>{{end}}{{if rw}} <button type="button" class="tag" hx-post="/dirs/mark" hx-vals='{{vals "dir" .Path "keep" "1" "rank" (itoa $.Rank)}}' hx-target="closest li" hx-swap="outerHTML" title="mark what the other copies have of it">keep this one</button>{{if .Marked}} <button type="button" class="tag" hx-post="/dirs/mark" hx-vals='{{vals "dir" .Path "keep" "0" "rank" (itoa $.Rank)}}' hx-target="closest li" hx-swap="outerHTML">unmark</button>{{end}}{{end}}</td>
 </tr>
 {{end}}</table>
 </li>
-{{end}}{{if .More}}<li class="more"><a class="button" href="{{.Next}}" hx-get="{{.More}}" hx-target="closest li" hx-swap="outerHTML">Show more</a></li>{{end}}
 {{end}}
 
-{{define "dgroups"}}{{$off := .Offset}}{{range $i, $g := .Groups}}
-<li class="group">
-<div class="head">
-<span class="rank">{{add 1 (add $off $i)}}</span>
-<b>{{len $g.Dirs}} copies</b>
-<span>of {{plural $g.Files "file"}}, {{size $g.Bytes}}</span>
-<span class="waste">{{size $g.Waste}} to reclaim</span>
-</div>
-<ul class="dirs">
-{{range $g.Dirs}}<li><a href="{{dirURL .}}">{{.}}</a></li>
-{{end}}</ul>
-</li>
-{{end}}{{if .More}}<li class="more"><a class="button" href="{{.Next}}" hx-get="{{.More}}" hx-target="closest li" hx-swap="outerHTML">Show more</a></li>{{end}}
+{{define "dgroups"}}{{range .Views}}
+{{template "dgroup" .}}{{end}}{{if .More}}<li class="more"><a class="button" href="{{.Next}}" hx-get="{{.More}}" hx-target="closest li" hx-swap="outerHTML">Show more</a></li>{{end}}
 {{end}}
 
 {{define "pairs"}}{{$off := .Offset}}{{range $i, $p := .Pairs}}
@@ -78,6 +105,7 @@ browser without scripts. */}}
 <td class="path"><a href="{{dirURL .Path}}">{{.Path}}</a></td>
 <td class="num">{{plural .Files "file"}}</td>
 <td class="num">{{size .Bytes}}</td>
+<td class="acts">{{template "tools" .Path}}</td>
 </tr>
 {{end}}</table>
 </li>
@@ -86,8 +114,45 @@ browser without scripts. */}}
 
 {{/* The other copies of a file or a directory, opened under it. */}}
 {{define "copies"}}<ul class="copies">
-{{range .Files}}<li><a href="{{fileURL .Path}}">{{.Path}}</a> <span class="muted">{{date .Modified}}</span></li>
-{{end}}{{range .Dirs}}<li><a href="{{dirURL .Path}}">{{.Path}}</a></li>
+{{range .Files}}<li><a href="{{fileURL .Path}}">{{.Path}}</a> <span class="muted">{{date .Modified}}</span> {{template "tools" .Path}}</li>
+{{end}}{{range .Dirs}}<li><a href="{{dirURL .Path}}">{{.Path}}</a> {{template "tools" .Path}}</li>
 {{end}}{{if not (or .Files .Dirs)}}<li class="muted">none any more: scan again</li>{{end}}
 </ul>
+{{end}}
+
+{{/* The marked files from .Offset on. */}}
+{{define "mrows"}}{{range .Rows}}<tr>
+<td class="num">{{size .Size}}</td>
+<td class="path"><a href="{{fileURL .Path}}">{{.Path}}</a> {{template "tools" .Path}}<div class="kept">kept: <a href="{{fileURL .Keep}}">{{.Keep}}</a></div></td>
+<td class="acts">{{template "toggle" (toggle .Path true)}}</td>
+</tr>
+{{end}}{{if .More}}<tr class="more"><td colspan="3"><a class="button" href="{{.Next}}" hx-get="{{.More}}" hx-target="closest tr" hx-swap="outerHTML">Show more</a></td></tr>{{end}}
+{{end}}
+
+{{/* A run of apply, which asks for itself again every second until it is
+done. */}}
+{{define "job"}}<div id="job"{{if and . (not .Finished)}} hx-get="/apply" hx-trigger="every 1s" hx-swap="outerHTML"{{end}}>{{with .}}
+<p class="{{if .Finished}}done{{else}}running{{end}}">{{if .Dry}}Checked{{else}}Moved{{end}}
+{{if .Finished}}{{else}}so far{{end}}: {{.Done}} of {{.Total}} files ·
+{{if .Dry}}{{.Moved}} can be moved{{else}}{{.Moved}} moved{{end}}, {{size .Bytes}} ·
+{{.Skipped}} skipped{{if .Err}} · <span class="error">{{.Err}}</span>{{end}}
+{{if .Finished}}{{if not .Dry}} · <a href="/marks">reload</a>{{end}}{{end}}</p>
+{{if .Skips}}<details{{if .Finished}} open{{end}}><summary>skipped, and why{{if lt (len .Skips) .Skipped}} (the first {{len .Skips}}){{end}}</summary>
+<table class="files">{{range .Skips}}<tr><td class="path">{{.Path}}</td><td>{{.Reason}}</td></tr>{{end}}</table>
+</details>{{end}}
+{{end}}</div>
+{{end}}
+
+{{/* A file moved, and the button that moves it back. */}}
+{{define "hrow"}}<tr>
+<td class="num">{{.ID}}</td>
+<td class="date">{{date .Moved}}</td>
+<td class="num">{{size .Size}}</td>
+<td class="path">{{.Path}}<div class="kept">kept: <a href="{{fileURL .Keep}}">{{.Keep}}</a></div>
+<div class="kept">{{if .Restored}}restored {{date .Restored}}{{else}}in {{.Trash}} {{template "tools" .Trash}}{{end}}</div></td>
+<td class="acts">{{if not .Restored}}{{if rw}}<button type="button" class="tag" hx-post="/restore" hx-vals='{{vals "id" (printf "%d" .ID)}}' hx-target="closest tr" hx-swap="outerHTML">restore</button>{{end}}{{end}}{{with .Err}} <span class="error">{{.}}</span>{{end}}</td>
+</tr>
+{{end}}
+
+{{define "hrows"}}{{range .Rows}}{{template "hrow" (hrow .)}}{{end}}{{if .More}}<tr class="more"><td colspan="5"><a class="button" href="{{.Next}}" hx-get="{{.More}}" hx-target="closest tr" hx-swap="outerHTML">Show more</a></td></tr>{{end}}
 {{end}}

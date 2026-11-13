@@ -13,14 +13,19 @@ Usage:
 	dupes dirs  [-by content|name] [-similar share] [-min size]
 	            [-n count] [-f text|csv|json] [-o file] [path...]
 	dupes stats
-	dupes web   [-http addr] [-n]
+	dupes web   [-http addr] [-n] [-rw]
 	dupes forget path...
 	dupes reset
+	dupes mark  [-keep dir] [-dry-run] path...
+	dupes unmark [-all] path...
+	dupes apply [-dry-run] [-v]
+	dupes history [-n count] [-f text|csv|json] [-o file]
+	dupes restore number|path...
 	dupes version
 
-Every command takes -db, the database file. It never deletes, moves or
-changes a file: it finds, and the deleting is left to whoever reads the
-report.
+Every command takes -db, the database file. Only apply changes the disks,
+and only by moving the files marked into a trash on their disk, which
+restore moves them back from: dupes never deletes a file.
 
 	dupes scan D:\ E:\Backup              # once, and again when the disks change
 	dupes files                           # the ten groups that waste the most
@@ -130,6 +135,45 @@ a file on the disks.
 
 	dupes forget E:/          # the disk that was sold
 	dupes reset               # everything
+
+# Cleaning up
+
+Cleaning up takes three steps, the first two of which change nothing on the
+disks: mark the copies to get rid of, look at what is marked, and apply.
+
+	dupes mark E:\old                       # what in E:\old is elsewhere too
+	dupes mark -keep D:\Photos E:\backup    # what of E:\backup D:\Photos has
+	dupes apply -dry-run                    # what would move, and what not and why
+	dupes apply                             # move it
+	dupes history                           # what was moved, numbered
+	dupes restore 12                        # and back
+
+A mark names the file to move and the copy of it that stays. The last copy
+of a file is never marked: mark leaves alone a file whose every copy is in
+the path or marked already, and -keep keeps the copies there even if they
+were marked before. unmark takes marks back.
+
+apply moves each marked file into .dupes-trash at the top of the scanned
+path it is in, under the path it had, so D:\a\b.jpg goes to
+D:\.dupes-trash\<time>\a\b.jpg: within one disk a move is instant, needs no
+space and is undone by moving back, which restore does. The recycle bin of
+each system works differently or, on some disks, not at all, and the trash
+works on all of them alike. Scans skip it. To empty it, delete it yourself in
+the file manager, which puts it in the recycle bin where there is one.
+
+Before it moves a file, apply checks that the file and the copy that stays
+are both where the scan saw them, unchanged in size and time, not one file
+under two paths, such as a hard link or a disk scanned under two names, and
+still the same content, read whole again. A file that fails any check stays,
+and apply says why. -dry-run makes every check but the reading. A file is
+never copied: one that cannot be moved within its disk stays too.
+
+dupes web -rw does the same in the browser: a mark beside every file of a
+group, "keep only this" to mark its other copies, "keep this one" on a
+directory to mark what its copies have of it, and on Marked the rule of
+mark -keep, the list, and the Check and Move buttons. History lists what was
+moved and moves it back. Every page offers to copy a path and to show it in
+the file manager: Explorer, Finder, or what xdg-open opens.
 
 # Limits
 

@@ -39,7 +39,7 @@ var embedFS embed.FS
 
 var tmpl = template.Must(template.New("").Funcs(template.FuncMap{
 	"size":   formatSize,
-	"date":   func(t time.Time) string { return t.Format("2006-01-02 15:04") },
+	"date":   date,
 	"pct":    func(f float64) string { return fmt.Sprintf("%.0f%%", 100*f) },
 	"add":    func(a, b int) int { return a + b },
 	"base":   filepath.Base,
@@ -61,6 +61,17 @@ var tmpl = template.Must(template.New("").Funcs(template.FuncMap{
 		}
 		return key
 	},
+	"vals": vals,
+	"fg": func(rank int, g fileGroup, by string) fgView {
+		return fgView{Rank: rank, G: g, Hash: by == "hash"}
+	},
+	"toggle": func(path string, marked bool) toggleView {
+		return toggleView{Path: path, Marked: marked}
+	},
+	"itoa": strconv.Itoa,
+	"hrow": func(r removal) hrowView { return hrowView{removal: r} },
+	// rw reports whether the pages mark files; each server says for itself.
+	"rw": func() bool { return false },
 }).ParseFS(embedFS, "tmpl/*.html"))
 
 // defaultWebAddr is where dupes web serves unless -http says otherwise; the
@@ -74,6 +85,7 @@ type webCmd struct {
 	db   string
 	addr string
 	none bool
+	rw   bool
 }
 
 func (*webCmd) Name() string { return "web" }
@@ -91,6 +103,10 @@ dirs commands, and every scanned directory, with the copies of what it holds.
 The pages read the database afresh after each scan, so web can stay running
 while dupes scan runs again elsewhere. Ctrl-C stops it.
 
+With -rw the pages mark files too, as dupes mark does, and move the marked
+ones away as dupes apply does, into the .dupes-trash of their disk; History
+lists what was moved and moves it back. Without it they change nothing.
+
 A port alone, -http :8754, serves on localhost too. Whatever the address, the
 pages answer only to a browser on this machine: they list the files of every
 disk scanned.
@@ -102,6 +118,7 @@ func (c *webCmd) SetFlags(f *flag.FlagSet) {
 	dbFlag(f, &c.db)
 	f.StringVar(&c.addr, "http", defaultWebAddr, "serve on `addr`")
 	f.BoolVar(&c.none, "n", false, "open no browser")
+	f.BoolVar(&c.rw, "rw", false, "mark files and move the marked ones, as mark and apply do")
 }
 
 func (c *webCmd) Execute(ctx context.Context, f *flag.FlagSet, _ ...any) subcommands.ExitStatus {
@@ -143,7 +160,7 @@ func (c *webCmd) run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	s := &server{db: db, path: c.db}
+	s := newServer(ctx, db, c.db, c.rw)
 	srv := &http.Server{Handler: s.handler(), ReadHeaderTimeout: 10 * time.Second}
 	home := "http://" + browseAddr(addr, ln.Addr()) + "/"
 	fmt.Fprintf(os.Stderr, "serving %s on %s\n", c.db, home)
@@ -207,10 +224,18 @@ func localOnly(h http.Handler) http.Handler {
 	})
 }
 
-// server serves the pages. It changes nothing: every route is a GET.
+// server serves the pages. Its GETs change nothing; its POSTs mark files
+// and move them, and answer only to a server with -rw, but for showing a
+// file in the file manager.
 type server struct {
 	db   *sql.DB
 	path string
+	rw   bool
+	ctx  context.Context // the server's own, which a move outlives a request in
+	tmpl *template.Template
+
+	jmu sync.Mutex
+	job *applyJob // the last apply, running or done
 
 	// The groups of directories, the totals and the counts take seconds on a
 	// database of a whole disk, so each is computed once for each state of
@@ -219,6 +244,14 @@ type server struct {
 	mu      sync.Mutex
 	version int64
 	memo    map[string]any
+}
+
+func newServer(ctx context.Context, db *sql.DB, path string, rw bool) *server {
+	s := &server{db: db, path: path, rw: rw, ctx: ctx}
+	s.tmpl = template.Must(tmpl.Clone()).Funcs(template.FuncMap{
+		"rw": func() bool { return s.rw },
+	})
+	return s
 }
 
 func (s *server) handler() http.Handler {
@@ -232,12 +265,44 @@ func (s *server) handler() http.Handler {
 	mux.HandleFunc("GET /dirs/export", s.handle(s.dirsExport))
 	mux.HandleFunc("GET /dir", s.handle(s.dir))
 	mux.HandleFunc("GET /copies", s.handle(s.copies))
-	for _, name := range []string{"style.css", "htmx.min.js", "htmx.LICENSE"} {
+	mux.HandleFunc("GET /marks", s.handle(s.marks))
+	mux.HandleFunc("GET /marks/more", s.handle(s.marksMore))
+	mux.HandleFunc("GET /history", s.handle(s.history))
+	mux.HandleFunc("GET /history/more", s.handle(s.historyMore))
+	mux.HandleFunc("GET /apply", s.handle(s.applyStatus))
+	mux.HandleFunc("POST /open", s.handle(s.open))
+	for path, h := range map[string]func(http.ResponseWriter, *http.Request) error{
+		"/mark":       s.markFile,
+		"/keep":       s.keepFile,
+		"/dirs/mark":  s.markDir,
+		"/rule":       s.rule,
+		"/unmark-all": s.unmarkAll,
+		"/apply":      s.apply,
+		"/restore":    s.restore,
+	} {
+		mux.HandleFunc("POST "+path, s.handle(s.writing(h)))
+	}
+	for _, name := range []string{"style.css", "dupes.js", "htmx.min.js", "htmx.LICENSE"} {
 		mux.HandleFunc("GET /"+name, func(w http.ResponseWriter, r *http.Request) {
 			http.ServeFileFS(w, r, embedFS, "static/"+name)
 		})
 	}
-	return localOnly(mux)
+	// A form on another site posting here is refused by the browser's own
+	// word for where it comes from, Sec-Fetch-Site or Origin.
+	return localOnly(http.NewCrossOriginProtection().Handler(mux))
+}
+
+// writing lets a handler that changes the database through only on a
+// server with -rw.
+func (s *server) writing(h func(http.ResponseWriter, *http.Request) error) func(http.ResponseWriter, *http.Request) error {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		if !s.rw {
+			http.Error(w, "dupes web -rw marks and moves files; this one only shows them",
+				http.StatusForbidden)
+			return nil
+		}
+		return h(w, r)
+	}
 }
 
 // handle turns a handler that returns an error into an http.HandlerFunc:
@@ -260,9 +325,9 @@ func (s *server) handle(h func(http.ResponseWriter, *http.Request) error) http.H
 
 // render executes a template into a buffer first, so that a failure halfway
 // is an error page and not half a page.
-func render(w http.ResponseWriter, name string, data any) error {
+func (s *server) render(w http.ResponseWriter, name string, data any) error {
 	var buf bytes.Buffer
-	if err := tmpl.ExecuteTemplate(&buf, name, data); err != nil {
+	if err := s.tmpl.ExecuteTemplate(&buf, name, data); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -299,10 +364,85 @@ type page struct {
 	Title  string
 	Active string
 	DB     string
+	RW     bool
+	Marked int64    // files marked, for the menu
+	Places []string // the scanned paths and what is right below them
 	P      any
 }
 
+// renderPage renders a whole page, with p as its own data.
+func (s *server) renderPage(w http.ResponseWriter, r *http.Request, name, title, active string, p any) error {
+	ctx := r.Context()
+	pg := page{Title: title, Active: active, DB: s.path, RW: s.rw, P: p}
+	if err := s.db.QueryRowContext(ctx, `select count(*) from marks`).Scan(&pg.Marked); err != nil {
+		return err
+	}
+	var err error
+	if pg.Places, err = s.places(ctx); err != nil {
+		return err
+	}
+	return s.render(w, name, pg)
+}
+
+// places returns what the fields of a path offer to pick from: each scanned
+// path and the directories right below it.
+func (s *server) places(ctx context.Context) ([]string, error) {
+	return cached(ctx, s, "places", func() ([]string, error) {
+		roots, err := listRoots(ctx, s.db)
+		if err != nil {
+			return nil, err
+		}
+		var out []string
+		for _, r := range roots {
+			out = append(out, r.path)
+			lo, hi := under(r.path)
+			rows, err := s.db.QueryContext(ctx, `
+				select path from dirs
+				where path >= ? and path < ? and instr(substr(path, ?), ?) = 0
+				order by path limit 500`,
+				lo, hi, utf8.RuneCountInString(lo)+1, string(os.PathSeparator))
+			if err != nil {
+				return nil, err
+			}
+			for rows.Next() {
+				var p string
+				if err := rows.Scan(&p); err != nil {
+					_ = rows.Close()
+					return nil, err
+				}
+				out = append(out, p)
+			}
+			_ = rows.Close()
+			if err := rows.Err(); err != nil {
+				return nil, err
+			}
+		}
+		return out, nil
+	})
+}
+
+// changed forgets what was computed from the files, which the server has
+// just changed itself: data_version only counts other connections' commits.
+func (s *server) changed() {
+	s.mu.Lock()
+	s.memo = nil
+	s.mu.Unlock()
+}
+
 func dirURL(dir string) string { return "/dir?path=" + url.QueryEscape(dir) }
+
+// date writes a time, or a time that may be nil, as the pages show them.
+func date(t any) string {
+	switch t := t.(type) {
+	case time.Time:
+		return t.Format("2006-01-02 15:04")
+	case *time.Time:
+		if t != nil {
+			return t.Format("2006-01-02 15:04")
+		}
+	}
+	return ""
+}
 
 // ---------------------------------------------------------------- overview
 
@@ -325,11 +465,21 @@ func (s *server) index(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	var p indexPage
 	var err error
+	// The groups of directories are the summary's count of them as well;
+	// summarize would compute them a second time.
+	groups, err := s.dirGroups(ctx)
+	if err != nil {
+		return err
+	}
+	if p.Dirs.Views, err = s.dgViews(ctx, 1, groups[:min(5, len(groups))]); err != nil {
+		return err
+	}
 	if p.Summary, err = cached(ctx, s, "summary", func() (summary, error) {
-		return summarize(ctx, s.db)
+		return summarizeFiles(ctx, s.db)
 	}); err != nil {
 		return err
 	}
+	p.Summary.DirGroups = len(groups)
 	if p.Roots, err = cached(ctx, s, "roots", func() ([]rootView, error) {
 		return s.roots(ctx)
 	}); err != nil {
@@ -339,15 +489,14 @@ func (s *server) index(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	p.Files.Form.By = "hash"
 	if p.Files.Groups, err = q.groups(ctx, s.db, 0, 5); err != nil {
 		return err
 	}
-	groups, err := s.dirGroups(ctx)
-	if err != nil {
+	if err := s.markGroups(ctx, p.Files.Groups); err != nil {
 		return err
 	}
-	p.Dirs.Groups = groups[:min(5, len(groups))]
-	return render(w, "index.html", page{Title: "overview", Active: "index", DB: s.path, P: p})
+	return s.renderPage(w, r, "index.html", "overview", "index", p)
 }
 
 func (s *server) roots(ctx context.Context) ([]rootView, error) {
@@ -440,6 +589,9 @@ func (s *server) filesPage(r *http.Request) (filesPage, error) {
 	if p.Groups, err = q.groups(ctx, s.db, p.Offset, pageSize); err != nil {
 		return p, err
 	}
+	if err := s.markGroups(ctx, p.Groups); err != nil {
+		return p, err
+	}
 	if next := p.Offset + len(p.Groups); next < p.Total {
 		v := form.values()
 		v.Set("offset", strconv.Itoa(next))
@@ -456,7 +608,7 @@ func (s *server) files(w http.ResponseWriter, r *http.Request) error {
 	} else if err != nil {
 		return err
 	}
-	return render(w, "files.html", page{Title: "files", Active: "files", DB: s.path, P: p})
+	return s.renderPage(w, r, "files.html", "files", "files", p)
 }
 
 func (s *server) filesMore(w http.ResponseWriter, r *http.Request) error {
@@ -464,7 +616,7 @@ func (s *server) filesMore(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	return render(w, "fgroups", p)
+	return s.render(w, "fgroups", p)
 }
 
 func (s *server) filesExport(w http.ResponseWriter, r *http.Request) error {
@@ -538,7 +690,7 @@ type dirsPage struct {
 	Form   dirsForm
 	Total  int
 	Offset int
-	Groups []dirGroupView
+	Views  []dgView
 	Pairs  []pairView
 	More   string
 	Next   string
@@ -650,7 +802,9 @@ func (s *server) dirsPage(r *http.Request) (dirsPage, error) {
 	end := min(p.Offset+pageSize, p.Total)
 	start := min(p.Offset, end)
 	if groups != nil {
-		p.Groups = groups[start:end]
+		if p.Views, err = s.dgViews(r.Context(), start+1, groups[start:end]); err != nil {
+			return p, err
+		}
 	} else {
 		p.Pairs = pairs[start:end]
 	}
@@ -669,7 +823,7 @@ func (s *server) dirs(w http.ResponseWriter, r *http.Request) error {
 	} else if err != nil {
 		return err
 	}
-	return render(w, "dirs.html", page{Title: "directories", Active: "dirs", DB: s.path, P: p})
+	return s.renderPage(w, r, "dirs.html", "directories", "dirs", p)
 }
 
 func (s *server) dirsMore(w http.ResponseWriter, r *http.Request) error {
@@ -678,9 +832,9 @@ func (s *server) dirsMore(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	if p.Form.By == "name" {
-		return render(w, "pairs", p)
+		return s.render(w, "pairs", p)
 	}
-	return render(w, "dgroups", p)
+	return s.render(w, "dgroups", p)
 }
 
 func (s *server) dirsExport(w http.ResponseWriter, r *http.Request) error {
@@ -725,12 +879,14 @@ type entry struct {
 	Modified time.Time // a file's
 	Copies   int       // other files of its hash, other directories of its content
 	Unique   bool      // a file without a hash: its size is no other's
+	Marked   bool      // a file's, for apply to move
 }
 
 type dirPage struct {
 	Path   string
 	Crumbs []crumb
 	Info   entry
+	Marks  dirRow // what is marked below
 	Known  bool
 	Dirs   []entry
 	Files  []entry
@@ -757,11 +913,14 @@ func (s *server) dir(w http.ResponseWriter, r *http.Request) error {
 		Scan(&p.Info.Files, &p.Info.Size, &sig)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
-		return render(w, "dir.html", page{Title: filepath.Base(path), Active: "dirs", DB: s.path, P: p})
+		return s.renderPage(w, r, "dir.html", filepath.Base(path), "dirs", p)
 	case err != nil:
 		return err
 	}
 	p.Known = true
+	if p.Marks, err = s.dirRow(ctx, path); err != nil {
+		return err
+	}
 	if sig != nil {
 		if err := s.db.QueryRowContext(ctx, `select count(*) - 1 from dirs where sig = ?`, sig).
 			Scan(&p.Info.Copies); err != nil {
@@ -798,7 +957,8 @@ func (s *server) dir(w http.ResponseWriter, r *http.Request) error {
 	rows, err = s.db.QueryContext(ctx, `
 		select f.path, f.name, f.size, f.mtime, f.hash is null,
 			case when f.hash is null then 0
-			else (select count(*) from files g where g.hash = f.hash) - 1 end
+			else (select count(*) from files g where g.hash = f.hash) - 1 end,
+			exists (select 1 from marks m where m.path = f.path)
 		from files f where f.dir = ?
 		order by f.size desc, f.name`, path)
 	if err != nil {
@@ -808,7 +968,8 @@ func (s *server) dir(w http.ResponseWriter, r *http.Request) error {
 	for rows.Next() {
 		var e entry
 		var mtime int64
-		if err := rows.Scan(&e.Path, &e.Name, &e.Size, &mtime, &e.Unique, &e.Copies); err != nil {
+		err := rows.Scan(&e.Path, &e.Name, &e.Size, &mtime, &e.Unique, &e.Copies, &e.Marked)
+		if err != nil {
 			return err
 		}
 		e.Modified = time.Unix(0, mtime)
@@ -817,7 +978,7 @@ func (s *server) dir(w http.ResponseWriter, r *http.Request) error {
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	return render(w, "dir.html", page{Title: filepath.Base(path), Active: "dirs", DB: s.path, P: p})
+	return s.renderPage(w, r, "dir.html", filepath.Base(path), "dirs", p)
 }
 
 // crumbs returns the directories from the root a path is in down to it.
@@ -870,7 +1031,7 @@ func (s *server) copies(w http.ResponseWriter, r *http.Request) error {
 		if err := rows.Err(); err != nil {
 			return err
 		}
-		return render(w, "copies", p)
+		return s.render(w, "copies", p)
 	}
 	path := r.FormValue("path")
 	files, err := listFiles(ctx, s.db, `
@@ -881,7 +1042,7 @@ func (s *server) copies(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	p.Files = files
-	return render(w, "copies", p)
+	return s.render(w, "copies", p)
 }
 
 // ---------------------------------------------------------------- helpers

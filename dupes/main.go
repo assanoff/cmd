@@ -35,6 +35,11 @@ func main() {
 	cdr.Register(&forgetCmd{}, "")
 	cdr.Register(&resetCmd{}, "")
 	cdr.Register(&webCmd{}, "")
+	cdr.Register(&markCmd{}, "cleaning up")
+	cdr.Register(&unmarkCmd{}, "cleaning up")
+	cdr.Register(&applyCmd{}, "cleaning up")
+	cdr.Register(&historyCmd{}, "cleaning up")
+	cdr.Register(&restoreCmd{}, "cleaning up")
 	cdr.Register(&versionCmd{}, "")
 	cdr.Register(cdr.HelpCommand(), "help")
 	cdr.Register(cdr.CommandsCommand(), "help")
@@ -42,8 +47,9 @@ func main() {
 		_, _ = fmt.Fprint(w, `usage: dupes <command> [flags] [args]
 
 Finds duplicate files and directories: scan records what the paths hold in a
-SQLite database, and the other commands report from it. Nothing on the disks
-is deleted, moved or changed.
+SQLite database, and the other commands report from it. Only apply changes
+the disks: it moves the files mark marked into a .dupes-trash folder on their
+disk, which restore moves them back from. Nothing is ever deleted.
 
 `)
 		cdr.VisitGroups(func(g *subcommands.CommandGroup) {

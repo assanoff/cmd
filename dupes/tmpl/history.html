@@ -1,0 +1,19 @@
+{{template "head" .}}{{with .P}}
+<h1>History</h1>
+<div class="stats">
+<div><b>{{.Total}}</b><span>files moved, {{.Restored}} of them restored</span></div>
+<div><b>{{size .Bytes}}</b><span>in .dupes-trash now</span></div>
+</div>
+
+{{if .Trashes}}<h2>Trash folders</h2>
+<p class="meta">Nothing in them is deleted by dupes. Once you have looked into one, delete it in the file manager, which puts it in the recycle bin.</p>
+<table class="list">
+{{range .Trashes}}<tr><td class="path">{{.}} {{template "tools" .}}</td></tr>
+{{end}}</table>{{end}}
+
+<h2>Moved</h2>
+{{if .Rows}}<table class="list">
+<tr><th class="num">#</th><th>moved</th><th class="num">size</th><th>file</th><th></th></tr>
+{{template "hrows" .}}</table>
+{{else}}<p class="none">Nothing moved yet.</p>{{end}}
+{{end}}{{template "foot" .}}
