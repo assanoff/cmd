@@ -68,11 +68,11 @@ func (c *statsCmd) run(ctx context.Context) error {
 		}
 		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\n", label, r.path, r.scanned.Format("2006-01-02 15:04"))
 	}
-	_, _ = fmt.Fprintf(tw, "files\t%d, %s\n", s.files, formatSize(s.bytes))
-	_, _ = fmt.Fprintf(tw, "hashed\t%d\n", s.hashed)
+	_, _ = fmt.Fprintf(tw, "files\t%d, %s\n", s.Files, formatSize(s.Bytes))
+	_, _ = fmt.Fprintf(tw, "hashed\t%d\n", s.Hashed)
 	_, _ = fmt.Fprintf(tw, "duplicate files\t%d in %d groups, %s to reclaim\n",
-		s.dupFiles, s.groups, formatSize(s.waste))
-	_, _ = fmt.Fprintf(tw, "duplicate dirs\t%d groups\n", s.dirGroups)
+		s.DupFiles, s.Groups, formatSize(s.Waste))
+	_, _ = fmt.Fprintf(tw, "duplicate dirs\t%d groups\n", s.DirGroups)
 	return tw.Flush()
 }
 
@@ -101,16 +101,16 @@ func listRoots(ctx context.Context, db *sql.DB) ([]root, error) {
 }
 
 type summary struct {
-	files, bytes, hashed    int64
-	groups, dupFiles, waste int64
-	dirGroups               int
+	Files, Bytes, Hashed    int64
+	Groups, DupFiles, Waste int64
+	DirGroups               int
 }
 
 func summarize(ctx context.Context, db *sql.DB) (summary, error) {
 	var s summary
 	err := db.QueryRowContext(ctx, `
 		select count(*), coalesce(sum(size), 0), count(hash) from files`,
-	).Scan(&s.files, &s.bytes, &s.hashed)
+	).Scan(&s.Files, &s.Bytes, &s.Hashed)
 	if err != nil {
 		return s, err
 	}
@@ -118,11 +118,11 @@ func summarize(ctx context.Context, db *sql.DB) (summary, error) {
 		select count(*), coalesce(sum(n), 0), coalesce(sum(w), 0) from (
 			select count(*) as n, sum(size) - max(size) as w from files
 			where hash is not null group by hash having n > 1)`,
-	).Scan(&s.groups, &s.dupFiles, &s.waste)
+	).Scan(&s.Groups, &s.DupFiles, &s.Waste)
 	if err != nil {
 		return s, err
 	}
 	groups, err := contentGroups(ctx, db)
-	s.dirGroups = len(groups)
+	s.DirGroups = len(groups)
 	return s, err
 }

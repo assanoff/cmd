@@ -132,7 +132,7 @@ func (c *scanCmd) run(ctx context.Context, args []string) error {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "%d duplicate files in %d groups, %s to reclaim; %d groups of duplicate directories\n",
-		s.dupFiles, s.groups, formatSize(s.waste), s.dirGroups)
+		s.DupFiles, s.Groups, formatSize(s.Waste), s.DirGroups)
 	return nil
 }
 

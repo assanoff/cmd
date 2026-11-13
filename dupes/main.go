@@ -34,6 +34,7 @@ func main() {
 	cdr.Register(&statsCmd{}, "")
 	cdr.Register(&forgetCmd{}, "")
 	cdr.Register(&resetCmd{}, "")
+	cdr.Register(&webCmd{}, "")
 	cdr.Register(&versionCmd{}, "")
 	cdr.Register(cdr.HelpCommand(), "help")
 	cdr.Register(cdr.CommandsCommand(), "help")

@@ -1,0 +1,32 @@
+{{template "head" .}}{{with .P}}
+<h1>Duplicate files</h1>
+{{/* A change of a field asks for the page with the new filter, takes its
+results and puts the URL into the history. The whole page comes back, so
+Back, which htmx 4 serves by fetching the URL again, gets a page too. */}}
+<form class="filters" action="/files" method="get"
+	hx-get="/files" hx-trigger="change, submit" hx-select="#results"
+	hx-target="#results" hx-swap="outerHTML" hx-push-url="true" hx-indicator="#results">
+<label>by
+<select name="by">
+<option value="hash"{{if eq .Form.By "hash"}} selected{{end}}>content</option>
+<option value="name"{{if eq .Form.By "name"}} selected{{end}}>name</option>
+<option value="namesize"{{if eq .Form.By "namesize"}} selected{{end}}>name and size</option>
+</select></label>
+<label>order
+<select name="sort">
+<option value="waste"{{if eq .Form.Sort "waste"}} selected{{end}}>space to reclaim</option>
+<option value="size"{{if eq .Form.Sort "size"}} selected{{end}}>file size</option>
+<option value="count"{{if eq .Form.Sort "count"}} selected{{end}}>copies</option>
+</select></label>
+<label>extensions <input name="ext" value="{{.Form.Ext}}" placeholder="jpg,mp4" size="10"></label>
+<label>at least <input name="min" value="{{.Form.Min}}" placeholder="100M" size="6"></label>
+<label class="wide">under <input name="under" value="{{.Form.Under}}" placeholder="D:\Backup"></label>
+<button type="submit">Show</button>
+</form>
+
+<div id="results">
+{{if .Error}}<p class="error">{{.Error}}</p>
+{{else}}<p class="meta">{{.Total}} groups · download <a href="{{.CSV}}">CSV</a> · <a href="{{.JSON}}">JSON</a></p>
+{{if .Groups}}<ol class="groups">{{template "fgroups" .}}</ol>{{else}}<p class="none">No duplicates.</p>{{end}}
+{{end}}</div>
+{{end}}{{template "foot" .}}

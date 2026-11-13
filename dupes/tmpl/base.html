@@ -1,0 +1,93 @@
+{{/* The frame of every page. htmx 4 does not inherit attributes, so every
+hx-* attribute sits on the element that makes the request. */}}
+{{define "head"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · dupes</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/style.css">
+<script src="/htmx.min.js" defer></script>
+</head>
+<body>
+<header>
+<a class="brand" href="/">dupes</a>
+<nav>
+<a href="/"{{if eq .Active "index"}} class="on"{{end}}>Overview</a>
+<a href="/files"{{if eq .Active "files"}} class="on"{{end}}>Files</a>
+<a href="/dirs"{{if eq .Active "dirs"}} class="on"{{end}}>Directories</a>
+</nav>
+</header>
+<main>
+{{end}}
+
+{{define "foot"}}</main>
+<footer>{{.DB}} · nothing here deletes a file · after <code>dupes scan</code>, reload</footer>
+</body>
+</html>
+{{end}}
+
+{{/* The groups of files from .Offset on, and the button for the next ones,
+which replaces itself with them. Its href is the same as a page, for a
+browser without scripts. */}}
+{{define "fgroups"}}{{$off := .Offset}}{{range $i, $g := .Groups}}
+<li class="group">
+<div class="head">
+<span class="rank">{{add 1 (add $off $i)}}</span>
+<b>{{$g.Count}} files</b>
+<span class="waste">{{size $g.Wasted}} to reclaim</span>
+<code class="key" title="{{$g.Key}}">{{short $g.Key}}</code>
+</div>
+<table class="files">
+{{range $g.Files}}<tr>
+<td class="num">{{size .Size}}</td>
+<td class="date">{{date .Modified}}</td>
+<td class="path"><a href="{{fileURL .Path}}">{{.Path}}</a></td>
+</tr>
+{{end}}</table>
+</li>
+{{end}}{{if .More}}<li class="more"><a class="button" href="{{.Next}}" hx-get="{{.More}}" hx-target="closest li" hx-swap="outerHTML">Show more</a></li>{{end}}
+{{end}}
+
+{{define "dgroups"}}{{$off := .Offset}}{{range $i, $g := .Groups}}
+<li class="group">
+<div class="head">
+<span class="rank">{{add 1 (add $off $i)}}</span>
+<b>{{len $g.Dirs}} copies</b>
+<span>of {{plural $g.Files "file"}}, {{size $g.Bytes}}</span>
+<span class="waste">{{size $g.Waste}} to reclaim</span>
+</div>
+<ul class="dirs">
+{{range $g.Dirs}}<li><a href="{{dirURL .}}">{{.}}</a></li>
+{{end}}</ul>
+</li>
+{{end}}{{if .More}}<li class="more"><a class="button" href="{{.Next}}" hx-get="{{.More}}" hx-target="closest li" hx-swap="outerHTML">Show more</a></li>{{end}}
+{{end}}
+
+{{define "pairs"}}{{$off := .Offset}}{{range $i, $p := .Pairs}}
+<li class="group">
+<div class="head">
+<span class="rank">{{add 1 (add $off $i)}}</span>
+<b>{{$p.Name}}</b>
+<span class="score">{{pct $p.Score}} alike</span>
+<span>{{$p.Common}} files, {{size $p.CommonBytes}} in common</span>
+</div>
+<table class="files">
+{{range (pair $p.A $p.B)}}<tr>
+<td class="path"><a href="{{dirURL .Path}}">{{.Path}}</a></td>
+<td class="num">{{plural .Files "file"}}</td>
+<td class="num">{{size .Bytes}}</td>
+</tr>
+{{end}}</table>
+</li>
+{{end}}{{if .More}}<li class="more"><a class="button" href="{{.Next}}" hx-get="{{.More}}" hx-target="closest li" hx-swap="outerHTML">Show more</a></li>{{end}}
+{{end}}
+
+{{/* The other copies of a file or a directory, opened under it. */}}
+{{define "copies"}}<ul class="copies">
+{{range .Files}}<li><a href="{{fileURL .Path}}">{{.Path}}</a> <span class="muted">{{date .Modified}}</span></li>
+{{end}}{{range .Dirs}}<li><a href="{{dirURL .Path}}">{{.Path}}</a></li>
+{{end}}{{if not (or .Files .Dirs)}}<li class="muted">none any more: scan again</li>{{end}}
+</ul>
+{{end}}

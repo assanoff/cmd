@@ -1,0 +1,27 @@
+{{template "head" .}}{{with .P}}
+<h1>Overview</h1>
+<div class="stats">
+<div><b>{{size .Summary.Waste}}</b><span>to reclaim from duplicate files</span></div>
+<div><b>{{.Summary.DupFiles}}</b><span>duplicate files in {{.Summary.Groups}} groups</span></div>
+<div><b>{{.Summary.DirGroups}}</b><span>groups of duplicate directories</span></div>
+<div><b>{{.Summary.Files}}</b><span>files recorded, {{size .Summary.Bytes}}; {{.Summary.Hashed}} hashed</span></div>
+</div>
+
+<h2>Scanned</h2>
+{{if .Roots}}<table class="list">
+<tr><th>path</th><th class="num">files</th><th class="num">size</th><th>scanned</th></tr>
+{{range .Roots}}<tr>
+<td class="path"><a href="{{dirURL .Path}}">{{.Path}}</a>{{if .Offline}} <span class="tag">not connected</span>{{end}}</td>
+<td class="num">{{.Files}}</td>
+<td class="num">{{size .Bytes}}</td>
+<td class="date">{{date .Scanned}}</td>
+</tr>
+{{end}}</table>
+{{else}}<p class="none">Nothing yet: run <code>dupes scan</code> on a disk.</p>{{end}}
+
+<h2>Files that waste the most <a class="all" href="/files">all</a></h2>
+{{if .Files.Groups}}<ol class="groups">{{template "fgroups" .Files}}</ol>{{else}}<p class="none">No duplicate files.</p>{{end}}
+
+<h2>Directories that waste the most <a class="all" href="/dirs">all</a></h2>
+{{if .Dirs.Groups}}<ol class="groups">{{template "dgroups" .Dirs}}</ol>{{else}}<p class="none">No duplicate directories.</p>{{end}}
+{{end}}{{template "foot" .}}

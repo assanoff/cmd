@@ -1,0 +1,31 @@
+{{template "head" .}}{{with .P}}
+<nav class="crumbs">{{range $i, $c := .Crumbs}}{{if $i}}<span class="sep">›</span>{{end}}<a href="{{dirURL $c.Path}}">{{$c.Name}}</a>{{end}}</nav>
+{{if not .Known}}<p class="none">Nothing is recorded in {{.Path}}.</p>
+{{else}}
+<p class="meta">{{plural .Info.Files "file"}} below, {{size .Info.Size}}
+{{if .Info.Copies}}· <button class="tag dup" hx-get="{{dirCopies .Path}}" hx-target="next .copies-of" hx-swap="innerHTML">{{.Info.Copies}} more {{if eq .Info.Copies 1}}copy{{else}}copies{{end}} of this directory</button>{{end}}</p>
+<div class="copies-of"></div>
+
+{{if .Dirs}}<h2>Directories</h2>
+<table class="list">
+<tr><th>name</th><th class="num">files</th><th class="num">size</th><th></th></tr>
+{{range .Dirs}}<tr>
+<td class="path"><a href="{{dirURL .Path}}">{{.Name}}</a></td>
+<td class="num">{{.Files}}</td>
+<td class="num">{{size .Size}}</td>
+<td>{{if .Copies}}<button class="tag dup" hx-get="{{dirCopies .Path}}" hx-target="next .copies-of" hx-swap="innerHTML">{{.Copies}} more {{if eq .Copies 1}}copy{{else}}copies{{end}}</button><div class="copies-of"></div>{{end}}</td>
+</tr>
+{{end}}</table>{{end}}
+
+{{if .Files}}<h2>Files</h2>
+<table class="list">
+<tr><th>name</th><th class="num">size</th><th>modified</th><th></th></tr>
+{{range .Files}}<tr id="{{.Name}}">
+<td class="path">{{.Name}}</td>
+<td class="num">{{size .Size}}</td>
+<td class="date">{{date .Modified}}</td>
+<td>{{if .Copies}}<button class="tag dup" hx-get="{{fileCopies .Path}}" hx-target="next .copies-of" hx-swap="innerHTML">{{.Copies}} more {{if eq .Copies 1}}copy{{else}}copies{{end}}</button><div class="copies-of"></div>{{else if .Unique}}<span class="tag" title="no other file has its size">unique</span>{{end}}</td>
+</tr>
+{{end}}</table>{{end}}
+{{end}}
+{{end}}{{template "foot" .}}

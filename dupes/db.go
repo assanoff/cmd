@@ -46,6 +46,7 @@ create table if not exists files (
 create index if not exists files_size on files(size, partial);
 create index if not exists files_hash on files(hash);
 create index if not exists files_lname on files(lname, size);
+create index if not exists files_dir on files(dir);
 
 create table if not exists dirs (
 	path  text primary key,
@@ -87,7 +88,13 @@ func openDB(path string, create bool) (*sql.DB, error) {
 	case 0:
 		_, err = db.Exec(schema + fmt.Sprintf("pragma user_version = %d;", schemaVersion))
 	case schemaVersion:
-		_, err = db.Exec(schema)
+		// Only a scan brings the schema up to date — an index a newer dupes
+		// adds. Building one over a disk's files holds the write lock for
+		// longer than a scan running meanwhile waits for it, and a report
+		// does without the index, only slower.
+		if create {
+			_, err = db.Exec(schema)
+		}
 	default:
 		err = fmt.Errorf("schema version %d, this dupes knows %d: delete the file and scan again", v, schemaVersion)
 	}

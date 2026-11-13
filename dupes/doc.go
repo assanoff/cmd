@@ -13,6 +13,7 @@ Usage:
 	dupes dirs  [-by content|name] [-similar share] [-min size]
 	            [-n count] [-f text|csv|json] [-o file] [path...]
 	dupes stats
+	dupes web   [-http addr] [-n]
 	dupes forget path...
 	dupes reset
 	dupes version
@@ -103,6 +104,22 @@ skipped: comparing every pair of them is slow and says little.
 format: text for reading, csv with one row per file or directory, json as an
 array of groups. -o writes to a file instead, and its extension picks the
 format unless -f does.
+
+# In a browser
+
+	dupes web                 # http://localhost:8754/, opened in the browser
+	dupes web -http :9000 -n  # another port, and no browser
+
+web serves the reports as pages: an overview of what was scanned, the
+duplicate files and directories with the filters of the files and dirs
+commands, and a page for every scanned directory, which lists what is in it
+and opens the other copies of a file or a directory under it. The CSV and
+JSON of a report are a link away. The pages read the database afresh after
+each scan, so web can keep running while a scan runs elsewhere.
+
+It answers only to a browser on this machine, whatever -http says: the pages
+list the files of every disk scanned. Its scripts are htmx 4, built into the
+binary with the templates and the styles, so it needs no network either.
 
 # Forgetting
 

@@ -97,14 +97,6 @@ type fileInfo struct {
 }
 
 func (c *filesCmd) run(ctx context.Context, args []string) error {
-	crit, ok := criteria[c.by]
-	if !ok {
-		return usagef("-by %s: hash, name or namesize", c.by)
-	}
-	order, ok := orders[c.sort]
-	if !ok {
-		return usagef("-sort %s: waste, size or count", c.sort)
-	}
 	if err := c.out.check(); err != nil {
 		return err
 	}
@@ -116,14 +108,56 @@ func (c *filesCmd) run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	q, err := newFileQuery(c.by, c.sort, flt, scope)
+	if err != nil {
+		return err
+	}
 	db, err := openDB(c.db, false)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = db.Close() }()
 
-	where, args0 := flt.where()
-	where = crit.where + " and " + where
+	total, err := q.count(ctx, db)
+	if err != nil {
+		return err
+	}
+	return c.out.write(total, func(w *writer, n int) error {
+		groups, err := q.groups(ctx, db, 0, n)
+		if err != nil {
+			return err
+		}
+		return writeFileGroups(w, groups)
+	})
+}
+
+// fileQuery asks the files table for groups of copies: by a criterion, in
+// an order, among the files a filter lets through, and only the groups with
+// a file in the scope when it is not empty. The files command and the web
+// page of files both ask it.
+type fileQuery struct {
+	crit    criterion
+	order   string
+	where   string // the condition on a file
+	wargs   []any
+	grouped string // the groups, unordered
+	gargs   []any
+}
+
+func newFileQuery(by, sort string, flt filter, scope []string) (*fileQuery, error) {
+	crit, ok := criteria[by]
+	if !ok {
+		return nil, usagef("-by %s: hash, name or namesize", by)
+	}
+	order, ok := orders[sort]
+	if !ok {
+		return nil, usagef("-sort %s: waste, size or count", sort)
+	}
+	q := &fileQuery{crit: crit, order: order}
+	cond, args := flt.where()
+	q.where = crit.where + " and " + cond
+	q.wargs = args
+
 	cols := strings.Join(crit.cols, ", ")
 	having := "count(*) > 1"
 	var hargs []any
@@ -136,36 +170,31 @@ func (c *filesCmd) run(ctx context.Context, args []string) error {
 		}
 		having += " and sum(" + strings.Join(ins, " or ") + ") > 0"
 	}
-	grouped := fmt.Sprintf(`select %s, count(*), sum(size), max(size) from files
-		where %s group by %s having %s`, cols, where, cols, having)
-	qargs := append(append([]any{}, args0...), hargs...)
-
-	var total int
-	if err := db.QueryRowContext(ctx, `select count(*) from (`+grouped+`)`, qargs...).Scan(&total); err != nil {
-		return err
-	}
-	return c.out.write(total, func(w *writer, n int) error {
-		groups, err := c.groups(ctx, db, grouped+" order by "+order+" limit ?",
-			append(qargs, n), crit, where, args0)
-		if err != nil {
-			return err
-		}
-		return writeFileGroups(w, groups)
-	})
+	q.grouped = fmt.Sprintf(`select %s, count(*), sum(size), max(size) from files
+		where %s group by %s having %s`, cols, q.where, cols, having)
+	q.gargs = append(append([]any{}, q.wargs...), hargs...)
+	return q, nil
 }
 
-// groups runs the query of the groups and then fetches the files of each.
-func (c *filesCmd) groups(ctx context.Context, db *sql.DB, query string, args []any,
-	crit criterion, where string, wargs []any,
-) ([]fileGroup, error) {
-	rows, err := db.QueryContext(ctx, query, args...)
+// count returns the number of groups.
+func (q *fileQuery) count(ctx context.Context, db *sql.DB) (int, error) {
+	var n int
+	err := db.QueryRowContext(ctx, `select count(*) from (`+q.grouped+`)`, q.gargs...).Scan(&n)
+	return n, err
+}
+
+// groups returns at most limit groups from offset in the order of the query,
+// each with its files.
+func (q *fileQuery) groups(ctx context.Context, db *sql.DB, offset, limit int) ([]fileGroup, error) {
+	rows, err := db.QueryContext(ctx, q.grouped+" order by "+q.order+" limit ? offset ?",
+		append(append([]any{}, q.gargs...), limit, offset)...)
 	if err != nil {
 		return nil, err
 	}
 	var groups []fileGroup
 	var keys [][]any
 	for rows.Next() {
-		key := make([]any, len(crit.cols))
+		key := make([]any, len(q.crit.cols))
 		dest := make([]any, 0, len(key)+3)
 		for i := range key {
 			dest = append(dest, &key[i])
@@ -188,32 +217,39 @@ func (c *filesCmd) groups(ctx context.Context, db *sql.DB, query string, args []
 	}
 
 	var match []string
-	for _, col := range crit.cols {
+	for _, col := range q.crit.cols {
 		match = append(match, col+" = ?")
 	}
-	q := `select path, size, mtime from files where ` + where + " and " +
+	fq := `select path, size, mtime from files where ` + q.where + " and " +
 		strings.Join(match, " and ") + ` order by path`
 	for i := range groups {
-		rows, err := db.QueryContext(ctx, q, append(append([]any{}, wargs...), keys[i]...)...)
+		files, err := listFiles(ctx, db, fq, append(append([]any{}, q.wargs...), keys[i]...)...)
 		if err != nil {
 			return nil, err
 		}
-		for rows.Next() {
-			var f fileInfo
-			var mtime int64
-			if err := rows.Scan(&f.Path, &f.Size, &mtime); err != nil {
-				_ = rows.Close()
-				return nil, err
-			}
-			f.Modified = time.Unix(0, mtime)
-			groups[i].Files = append(groups[i].Files, f)
-		}
-		_ = rows.Close()
-		if err := rows.Err(); err != nil {
-			return nil, err
-		}
+		groups[i].Files = files
 	}
 	return groups, nil
+}
+
+// listFiles runs a query of path, size and mtime.
+func listFiles(ctx context.Context, db *sql.DB, query string, args ...any) ([]fileInfo, error) {
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var files []fileInfo
+	for rows.Next() {
+		var f fileInfo
+		var mtime int64
+		if err := rows.Scan(&f.Path, &f.Size, &mtime); err != nil {
+			return nil, err
+		}
+		f.Modified = time.Unix(0, mtime)
+		files = append(files, f)
+	}
+	return files, rows.Err()
 }
 
 // keyString shows what the files of a group share: the hash in hex, or the
