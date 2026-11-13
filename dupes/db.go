@@ -6,13 +6,15 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 
-	_ "modernc.org/sqlite" // the database/sql driver, without cgo
+	"modernc.org/sqlite" // the database/sql driver, without cgo
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 // schemaVersion is stored in user_version. A database of another version is
@@ -64,19 +66,21 @@ create index if not exists dirs_lname on dirs(lname);
 ` + records
 
 // records are the tables of the cleaning up: the files marked to be moved
-// away, each with the copy of it that stays, and the files moved. They are
-// small, so every command creates them if a database made before them has
-// none; when they are there, which is always but once, that writes nothing.
+// away, each with the copy of it that stays, and the files moved. A database
+// a dupes before them made has none; see ensureRecords.
 //
 // A file that keeps another is never marked itself: the marking keeps it so,
 // and apply checks it again before it moves anything.
-const records = `
+const records = recordTables + `
+create index if not exists marks_keep on marks(keep);
+`
+
+const recordTables = `
 create table if not exists marks (
 	path   text primary key,
 	keep   text not null,
 	marked integer not null
 );
-create index if not exists marks_keep on marks(keep);
 
 create table if not exists removed (
 	id       integer primary key,
@@ -122,12 +126,11 @@ func openDB(path string, create bool) (*sql.DB, error) {
 		// Only a scan brings the schema up to date — an index a newer dupes
 		// adds. Building one over a disk's files holds the write lock for
 		// longer than a scan running meanwhile waits for it, and a report
-		// does without the index, only slower. The records are another
-		// matter: creating an empty table takes no time.
+		// does without the index, only slower.
 		if create {
 			_, err = db.Exec(schema)
 		} else {
-			_, err = db.Exec(records)
+			err = ensureRecords(db, false)
 		}
 	default:
 		err = fmt.Errorf("schema version %d, this dupes knows %d: delete the file and scan again", v, schemaVersion)
@@ -191,4 +194,52 @@ func canonicalAll(paths []string) ([]string, error) {
 		out = append(out, c)
 	}
 	return out, nil
+}
+
+// ensureRecords makes sure that the tables of the cleaning up are there in a
+// database a dupes before them made. Creating them takes the write lock,
+// which a scan running meanwhile may hold for as long as it reads a batch of
+// big files. A command that only reads does not wait for it: until the
+// tables are there, it gets empty ones of its own, which vanish when it
+// ends. A command that marks or moves does wait, for as long as SQLite
+// waits for a lock, and says so if that is not long enough.
+func ensureRecords(db *sql.DB, writing bool) error {
+	var n int
+	err := db.QueryRow(`select count(*) from main.sqlite_master
+		where type = 'table' and name in ('marks', 'removed')`).Scan(&n)
+	if err != nil || n == 2 {
+		if err == nil {
+			_, err = db.Exec(`drop table if exists temp.marks; drop table if exists temp.removed`)
+		}
+		return err
+	}
+	if !writing {
+		if _, err := db.Exec(`pragma busy_timeout = 0`); err != nil {
+			return err
+		}
+	}
+	_, err = db.Exec(records)
+	if !writing {
+		if _, perr := db.Exec(`pragma busy_timeout = 10000`); perr != nil {
+			return perr
+		}
+	}
+	switch {
+	case err == nil:
+		_, err = db.Exec(`drop table if exists temp.marks; drop table if exists temp.removed`)
+		return err
+	case !isBusy(err):
+		return err
+	case writing:
+		return errors.New("a scan is writing to the database and holds it: try again when it is done")
+	}
+	_, err = db.Exec(strings.ReplaceAll(recordTables, "create table", "create temp table"))
+	return err
+}
+
+// isBusy reports whether err is SQLite's "database is locked", which the
+// low byte of an extended code says too.
+func isBusy(err error) bool {
+	var e *sqlite.Error
+	return errors.As(err, &e) && e.Code()&0xff == sqlite3.SQLITE_BUSY
 }

@@ -255,46 +255,58 @@ func (w *walker) walk(ctx context.Context, root string) (walkStats, error) {
 
 // batch runs one statement many times, a few thousand to a transaction:
 // SQLite commits a transaction at the speed of the disk, not of the rows.
+// The rows wait in memory and go in together, so that the write lock is
+// held while they are written and not while they are found: hashing a batch
+// of big files takes minutes, which every other command opening the
+// database would have to wait.
 type batch struct {
 	db    *sql.DB
 	query string
-	tx    *sql.Tx
-	stmt  *sql.Stmt
-	n     int
+	rows  [][]any
+	since time.Time // when the oldest row waiting came
 }
 
-const batchSize = 5000
+const (
+	batchSize = 5000
+	batchAge  = time.Second // a row waits no longer, if another one follows
+)
 
 func (b *batch) exec(args ...any) error {
-	if b.tx == nil {
-		tx, err := b.db.Begin()
-		if err != nil {
-			return err
-		}
-		stmt, err := tx.Prepare(b.query)
-		if err != nil {
-			_ = tx.Rollback()
-			return err
-		}
-		b.tx, b.stmt = tx, stmt
+	if len(b.rows) == 0 {
+		b.since = time.Now()
 	}
-	if _, err := b.stmt.Exec(args...); err != nil {
-		return err
-	}
-	if b.n++; b.n >= batchSize {
+	b.rows = append(b.rows, args)
+	if len(b.rows) >= batchSize || time.Since(b.since) >= batchAge {
 		return b.commit()
 	}
 	return nil
 }
 
+// commit writes the rows waiting in one transaction.
 func (b *batch) commit() error {
-	if b.tx == nil {
+	if len(b.rows) == 0 {
 		return nil
 	}
-	_ = b.stmt.Close()
-	err := b.tx.Commit()
-	b.tx, b.stmt, b.n = nil, nil, 0
-	return err
+	tx, err := b.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	stmt, err := tx.Prepare(b.query)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = stmt.Close() }()
+	for _, r := range b.rows {
+		if _, err := stmt.Exec(r...); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	b.rows = b.rows[:0]
+	return nil
 }
 
 // match reports whether name matches one of the patterns, ignoring case.

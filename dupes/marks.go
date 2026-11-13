@@ -245,6 +245,9 @@ func (c *markCmd) run(ctx context.Context, args []string) error {
 		return err
 	}
 	defer func() { _ = db.Close() }()
+	if err := ensureRecords(db, true); err != nil {
+		return err
+	}
 	roots, err := listRoots(ctx, db)
 	if err != nil {
 		return err
@@ -318,6 +321,9 @@ func (c *unmarkCmd) run(ctx context.Context, args []string) error {
 		return err
 	}
 	defer func() { _ = db.Close() }()
+	if err := ensureRecords(db, true); err != nil {
+		return err
+	}
 	if c.all {
 		res, err := db.ExecContext(ctx, `delete from marks`)
 		if err != nil {

@@ -301,6 +301,10 @@ func (s *server) writing(h func(http.ResponseWriter, *http.Request) error) func(
 				http.StatusForbidden)
 			return nil
 		}
+		if err := ensureRecords(s.db, true); err != nil {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return nil
+		}
 		return h(w, r)
 	}
 }

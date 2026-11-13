@@ -162,3 +162,57 @@ func marked(t *testing.T, db *sql.DB, root string) string {
 	}
 	return strings.Join(out, " ")
 }
+
+// A database a dupes before marks made has no tables for them, and creating
+// them waits for the write lock, which a scan of that dupes holds for
+// minutes. The reports must not wait: they get empty tables of their own.
+func TestRecordsWhileLocked(t *testing.T) {
+	ctx := context.Background()
+	root := tree(t, map[string][]byte{"a.txt": []byte("one"), "b.txt": []byte("one")})
+	path := filepath.Join(t.TempDir(), "dupes.db")
+	scan(t, path, root)
+
+	other, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = other.Close() }()
+	if _, err := other.Exec(`drop table marks; drop table removed`); err != nil {
+		t.Fatal(err)
+	}
+	scanning, err := other.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := scanning.ExecContext(ctx, `begin immediate`); err != nil {
+		t.Fatal(err)
+	}
+
+	start := time.Now()
+	db, err := openDB(path, false)
+	if err != nil {
+		t.Fatalf("opening while a scan writes: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if d := time.Since(start); d > 3*time.Second {
+		t.Errorf("opening while a scan writes took %v", d)
+	}
+	if n, _, err := markTotals(ctx, db); err != nil || n != 0 {
+		t.Errorf("marks while a scan writes: %d, %v", n, err)
+	}
+
+	if _, err := scanning.ExecContext(ctx, `rollback`); err != nil {
+		t.Fatal(err)
+	}
+	_ = scanning.Close()
+	if err := ensureRecords(db, true); err != nil {
+		t.Fatal(err)
+	}
+	var main, temp int
+	if err := db.QueryRow(`select
+		(select count(*) from main.sqlite_master where name in ('marks', 'removed')),
+		(select count(*) from temp.sqlite_master where name in ('marks', 'removed'))`).
+		Scan(&main, &temp); err != nil || main != 2 || temp != 0 {
+		t.Errorf("tables: %d in the database, %d of its own, %v; want 2 and 0", main, temp, err)
+	}
+}

@@ -132,8 +132,7 @@ browser without scripts. */}}
 {{/* A run of apply, which asks for itself again every second until it is
 done. */}}
 {{define "job"}}<div id="job"{{if and . (not .Finished)}} hx-get="/apply" hx-trigger="every 1s" hx-swap="outerHTML"{{end}}>{{with .}}
-<p class="{{if .Finished}}done{{else}}running{{end}}">{{if .Dry}}Checked{{else}}Moved{{end}}
-{{if .Finished}}{{else}}so far{{end}}: {{.Done}} of {{.Total}} files ·
+<p class="{{if .Finished}}done{{else}}running{{end}}">{{if .Dry}}Checked{{else}}Moved{{end}}{{if not .Finished}} so far{{end}}: {{.Done}} of {{.Total}} files ·
 {{if .Dry}}{{.Moved}} can be moved{{else}}{{.Moved}} moved{{end}}, {{size .Bytes}} ·
 {{.Skipped}} skipped{{if .Err}} · <span class="error">{{.Err}}</span>{{end}}
 {{if .Finished}}{{if not .Dry}} · <a href="/marks">reload</a>{{end}}{{end}}</p>

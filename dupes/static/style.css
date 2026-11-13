@@ -122,6 +122,11 @@ li.more { list-style: none; text-align: center; padding: 8px 0 16px; }
 
 table { border-collapse: collapse; width: 100%; }
 table.files td { padding: 2px 10px 2px 0; vertical-align: top; }
+/* The same widths in every group, so that the paths of one start where
+those of the next do. */
+table.files td.num { width: 6.5em; }
+table.files td.date { width: 9.5em; }
+table.files td.acts { width: 1%; }
 table.list { background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
 table.list th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; }
 table.list th, table.list td { padding: 6px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }

@@ -353,6 +353,9 @@ func (c *applyCmd) run(ctx context.Context) error {
 		return err
 	}
 	defer func() { _ = db.Close() }()
+	if err := ensureRecords(db, true); err != nil {
+		return err
+	}
 	plan, err := loadPlan(ctx, db)
 	if err != nil {
 		return err
@@ -618,6 +621,9 @@ func (c *restoreCmd) run(ctx context.Context, args []string) error {
 		return err
 	}
 	defer func() { _ = db.Close() }()
+	if err := ensureRecords(db, true); err != nil {
+		return err
+	}
 	roots, err := listRoots(ctx, db)
 	if err != nil {
 		return err
