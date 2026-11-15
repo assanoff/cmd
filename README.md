@@ -12,6 +12,7 @@ command never drags in another's dependencies.
 | [chapters](chapters) | Write a timecoded tracklist into an audio file |
 | [go-audit](go-audit) | Run the Go linters and checkers over a module, keep and browse the reports |
 | [dupes](dupes) | Find duplicate files and directories across disks; move the extra copies aside, never delete |
+| [reqlog](reqlog) | An HTTP endpoint that answers every request and prints what came in |
 
 ## Install
 
@@ -290,6 +291,25 @@ they hold. Subcommands are
 [google/subcommands](https://github.com/google/subcommands); SQLite is
 modernc.org's CGo-free build. `go doc github.com/assanoff/cmd/dupes@latest`
 has the rest.
+
+## reqlog
+
+`reqlog` stands in for a service an integration sends to: it answers every
+request the same way and prints what came in — method, path, headers and the
+body, with JSON indented. Point the sender's host at it and keep the path.
+
+```sh
+go install github.com/assanoff/cmd/reqlog@latest
+
+reqlog                              # http://127.0.0.1:8099, answers 200 {"ok":true}
+reqlog -o sent.jsonl                # also append every request as a JSON line
+reqlog -s 500                       # answer with an error to see the retries
+reqlog -a :9000 -b OK               # another port, a plain-text answer
+```
+
+It listens on the loopback interface unless `-a` says otherwise. The `-o` file
+keeps each body exactly as sent, byte order mark included; `go doc
+github.com/assanoff/cmd/reqlog@latest` shows how to read it with jq.
 
 ## Versioning
 
