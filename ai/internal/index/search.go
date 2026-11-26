@@ -107,6 +107,22 @@ func (x *Index) Search(ctx context.Context, vec []float32, query string, limit i
 // the index scores 0.28 against its nearest miss. Measured on that index, the
 // misses below a real answer came to 0.5–0.84 of its similarity, with one
 // exception at 0.87; the answers themselves were alone at the top.
+//
+// That index was three synthesized files a minute or two long, so 0.85 is a
+// guess for a real archive rather than a measurement of one. Where it is
+// known to fail: a query about two topics keeps only the one nearer to it,
+// the other falling under the cut, and a query about nothing in the index
+// still lists a miss or two, because the cut is relative to the best miss.
+//
+// A reranker, bge-reranker-v2-m3 from Kronk's catalogue, was tried for the
+// job and dropped. Scoring pieces, it pushed the one exception down to 0.001
+// against its answer's 0.79, but it scores a short query near zero even
+// against the right piece — "Домбай" 0.003, a query about nothing
+// 0.000–0.001 — so it would need a relative cut of its own. Scoring passages,
+// it put the wrong file first for "Домбай" and "кофе". And it is a second
+// model, 600 MB to load, and 600 ms to score 15 pieces where the whole search
+// takes 0.07–0.26 s now. If 0.85 lets noise through on a real archive, it is
+// the next thing to try, as an optional rerank role that is off unless bound.
 const closeEnough = 0.85
 
 // relevant keeps the first limit hits that come within closeEnough of the
@@ -137,6 +153,12 @@ func relevant(hits []Hit, limit int) []Hit {
 // ten seconds or so, embedded when the file was indexed, so finding the
 // nearest is one query a hit and no call to the model. Embedding them here
 // instead, per search, cost half a second for three hits on a laptop GPU.
+//
+// The moment is right to within a piece, and the piece chosen is the one that
+// says most about the query, not the one where the story starts: "talked
+// about taxes" lands on 0:36, on the overpayment, rather than on 0:30, where
+// the story about it begins. A bonus for pieces that share the query's words,
+// a name above all, could pull it earlier; nothing has asked for it yet.
 //
 // A hit with no pieces to compare — found by its words alone, or in an index
 // made before pieces — keeps the start and the text of its passage.
