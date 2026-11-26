@@ -1,0 +1,58 @@
+{{define "page" -}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+<style>{{.Style}}</style>
+<script>{{.Script}}</script>
+</head>
+<body>
+<aside>
+<div class="top"><a class="brand" href="/">prr read</a>
+<button id="theme" type="button" title="Light or dark">◐</button></div>
+{{- range .PRs}}
+<section>
+<p class="pr"><a href="{{.URL}}">{{.Ref}}</a> {{.Title}}</p>
+{{- with .Prefix}}
+<p class="prefix">{{.}}</p>
+{{- end}}
+<ul>
+{{- range .Files}}
+<li><span class="st st-{{.Status}}">{{.Status}}</span>
+{{- if .Href}}<a href="{{.Href}}"{{if .Current}} aria-current="page"{{end}}>{{.Name}}</a>
+{{- else}}<s>{{.Name}}</s>{{end}}</li>
+{{- end}}
+</ul>
+</section>
+{{- end}}
+</aside>
+<main>
+{{- with .Crumbs}}
+<nav class="crumbs">
+{{- range $i, $c := .}}{{if $i}}<span>/</span>{{end}}
+{{- if .Href}}<a href="{{.Href}}">{{.Name}}</a>{{else}}<span>{{.Name}}</span>{{end}}
+{{- end}}
+</nav>
+{{- end}}
+<article>
+{{.Body}}
+</article>
+</main>
+</body>
+</html>
+{{end}}
+
+{{define "index" -}}
+{{range .}}
+<section class="card">
+<h2><a href="{{.URL}}">{{.Ref}}</a> {{.Title}}</h2>
+<p class="meta">{{.Author}} · <code>{{.Branch}}</code> → <code>{{.Base}}</code>
+· <code>{{printf "%.10s" .Head}}</code> · {{.State}}</p>
+{{- with .Desc}}
+<div class="desc">{{.}}</div>
+{{- end}}
+</section>
+{{end}}
+{{- end}}
