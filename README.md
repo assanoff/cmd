@@ -13,6 +13,7 @@ command never drags in another's dependencies.
 | [go-audit](go-audit) | Run the Go linters and checkers over a module, keep and browse the reports |
 | [dupes](dupes) | Find duplicate files and directories across disks; move the extra copies aside, never delete |
 | [reqlog](reqlog) | An HTTP endpoint that answers every request and prints what came in |
+| [prr](prr) | Read GitLab merge requests and GitHub pull requests locally, review them with an agent |
 
 ## Install
 
@@ -310,6 +311,61 @@ reqlog -a :9000 -b OK               # another port, a plain-text answer
 It listens on the loopback interface unless `-a` says otherwise. The `-o` file
 keeps each body exactly as sent, byte order mark included; `go doc
 github.com/assanoff/cmd/reqlog@latest` shows how to read it with jq.
+
+## prr
+
+`prr` reads and reviews other people's GitLab merge requests and GitHub pull
+requests on the local machine. It works in bare clones of its own under
+`~/prr`, so it never fetches into the repositories you work in.
+
+```sh
+go install github.com/assanoff/cmd/prr@latest
+go install rsc.io/cmd/review@latest   # prr review hands the request to it
+prr skill -install                    # the skill for Claude Code, see below
+```
+
+It reaches GitLab through [glab](https://gitlab.com/gitlab-org/cli) and GitHub
+through [gh](https://cli.github.com), logged in to the hosts you use
+(`glab auth login --hostname git.example.com`, `gh auth login`); public pull
+requests on github.com are read without a login.
+
+```sh
+prr read https://gitlab.example.com/g/docs/-/merge_requests/77 \
+         https://gitlab.example.com/g/docs/-/merge_requests/78  # rendered, side by side
+prr review https://github.com/owner/repo/pull/12                # in review, one change
+prr wait                                                        # until a thread wants the agent
+prr post                                                        # what would go to the author
+prr post -y                                                     # as a draft review on the host
+```
+
+`read` lays the files of the requests over their target branch and serves the
+Markdown rendered, with the changed files on the side. `review` gives
+[review](https://github.com/rsc/cmd/tree/main/review) a worktree holding one
+commit, the whole request on its merge base, so every push of the author is a
+new snapshot of one change, and brings in the discussions already on the host,
+moved to the lines they are about in the current head. A comment with `@c` is
+for the agent, which `prr wait` wakes up to answer it in its thread; a comment
+without it is for people, and `prr post` sends those as remarks and replies to
+the discussions: draft notes on GitLab or a pending review on GitHub, for you
+to submit.
+
+### The skill
+
+The agent learns the loop from a skill built into the binary.
+`prr skill -install` writes it to `~/.claude/skills/prr/SKILL.md`, and
+`prr skill` prints it, for an agent that reads skills from elsewhere. Run
+`prr skill -install` again after updating prr, so that the skill matches the
+binary.
+
+Then, in Claude Code, hand it the links and say what you want:
+
+- "read these locally: <links>": it starts `prr read` and gives you the page;
+- "review !77 with me": it starts `prr review`, then waits in the background
+  for your `@c` comments and answers them in their threads, having looked at
+  the code and the other threads first;
+- "go through it first": it leaves its findings as threads of its own;
+- "send my comments": it shows what `prr post` would send and posts the draft
+  review only after your yes; you submit it on the host.
 
 ## Versioning
 
