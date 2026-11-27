@@ -204,21 +204,24 @@ func auditMarkdown(rep *auditReport) string {
 
 	p("| Check | Status | Findings | Time | Note |\n|---|---|---:|---:|---|\n")
 	for _, c := range rep.Checks {
-		count, took := "–", "–"
+		name, count, took := c.Name, "–", "–"
+		if c.Count > 0 {
+			name = fmt.Sprintf("[%s](#%s)", c.Name, slug(checkHeading(c)))
+		}
 		if c.Status == statusOK || c.Count > 0 {
 			count = fmt.Sprint(c.Count)
 		}
 		if c.Out != "" {
 			took = duration(time.Duration(c.Seconds * float64(time.Second)))
 		}
-		p("| %s | %s | %s | %s | %s |\n", c.Name, c.Status, count, took, cell(c.Note))
+		p("| %s | %s | %s | %s | %s |\n", name, c.Status, count, took, cell(c.Note))
 	}
 
 	for _, c := range rep.Checks {
 		if c.Count == 0 {
 			continue
 		}
-		p("\n## %s: %d %s\n\n", c.Name, c.Count, plural(c.Count, "finding"))
+		p("\n## %s\n\n", checkHeading(c))
 		if c.Note != "" {
 			p("%s\n\n", inline(c.Note))
 		}
@@ -229,6 +232,13 @@ func auditMarkdown(rep *auditReport) string {
 		}
 	}
 	return blankLines.ReplaceAllString(b.String(), "\n\n")
+}
+
+// checkHeading returns the heading of the section of a check with findings.
+// The line of the check in the table links to it by the id GitHub gives it,
+// as the page of the report does.
+func checkHeading(c checkReport) string {
+	return fmt.Sprintf("%s: %d %s", c.Name, c.Count, plural(c.Count, "finding"))
 }
 
 // blankLines matches more than one blank line.

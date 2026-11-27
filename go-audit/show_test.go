@@ -226,8 +226,9 @@ func TestRenderMarkdown(t *testing.T) {
 		"--allow-parallel-runners \"quoted\" ...\n"
 	html := string(renderMarkdown(md, root, testLinker))
 	for _, want := range []string{
-		"<h1>go-audit: example.com/m</h1>",
+		`<h1 id="go-audit-examplecomm">go-audit: example.com/m</h1>`,
 		"<table>", "<td>vet</td>",
+		"<details open>\n<summary><h2 id=\"vet-1-finding\">vet: 1 finding</h2></summary>\n<ul>",
 		`<td><a href="/src/a.go#L3.1">a.go:3:1</a>: oops</td>`,
 		`<a href="/src/a.go#L12.5"><code>a.go:12:5</code></a>`,
 		"&lt;script&gt;alert(1)&lt;/script&gt;", "&lt;b&gt;bold&lt;/b&gt;",
@@ -279,6 +280,25 @@ func TestRenderGoStyle(t *testing.T) {
 		if !strings.Contains(html, want) {
 			t.Errorf("the HTML of a go-style report has no %q:\n%s", want, html)
 		}
+	}
+}
+
+func TestRenderSections(t *testing.T) {
+	md := "# Title\n\nintro\n\n" +
+		"## A\n\na\n\n### A.1 `x` *y*\n\nb\n\n" +
+		"## A\n\nc\n\n#### Deep <i>tag</i>\n\n" +
+		"## Ünïcode – Straße_1\n\n## Own {#own}\n"
+	want := "<h1 id=\"title\">Title</h1>\n<p>intro</p>\n" +
+		"<details open>\n<summary><h2 id=\"a\">A</h2></summary>\n<p>a</p>\n" +
+		"<details open>\n<summary><h3 id=\"a1-x-y\">A.1 <code>x</code> <em>y</em></h3></summary>\n<p>b</p>\n" +
+		"</details>\n</details>\n" +
+		"<details open>\n<summary><h2 id=\"a-1\">A</h2></summary>\n<p>c</p>\n" +
+		"<details open>\n<summary><h4 id=\"deep-tag\">Deep &lt;i&gt;tag&lt;/i&gt;</h4></summary>\n" +
+		"</details>\n</details>\n" +
+		"<details open>\n<summary><h2 id=\"ünïcode--straße_1\">Ünïcode – Straße_1</h2></summary>\n</details>\n" +
+		"<details open>\n<summary><h2 id=\"own\">Own</h2></summary>\n</details>\n"
+	if got := string(renderMarkdown(md, "", nil)); got != want {
+		t.Errorf("the sections are\n%s\nwant\n%s", got, want)
 	}
 }
 

@@ -165,12 +165,21 @@ func TestAuditStatuses(t *testing.T) {
 	}
 	for _, want := range []string{
 		"# go-audit: example.com/m",
+		"| fine | ok | 0 |",
+		"| [changed](#changed-1-finding) | found | 1 |",
 		"| broken | error | – | ", "| it broke |",
 		"| absent | skipped | – | – | no-such-tool is not in PATH |",
 		"## changed: 1 finding\n\n- something changed\n",
 	} {
 		if !strings.Contains(string(md), want) {
 			t.Errorf("report:\n%s\nwant it to contain %q", md, want)
+		}
+	}
+	// The link of the check leads to its section on the page.
+	html := string(renderMarkdown(string(md), "", nil))
+	for _, want := range []string{`<a href="#changed-1-finding">changed</a>`, `<h2 id="changed-1-finding">`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("the page of the report has no %q:\n%s", want, html)
 		}
 	}
 

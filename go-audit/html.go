@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"rsc.io/markdown"
 )
@@ -28,7 +29,9 @@ var styleCSS string
 // editor or to the file itself, web to its page of the file.
 type linker func(file string, line, col int) string
 
-// page is the template of a page: a title, the style and the body.
+// page is the template of a page: a title, the style and the body. Its
+// script opens the folded sections around the target of a link within the
+// page, so that a link to a section shows what is in it.
 var page = template.Must(template.New("page").Parse(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -41,6 +44,30 @@ var page = template.Must(template.New("page").Parse(`<!DOCTYPE html>
 <main>
 {{.Body}}
 </main>
+<script>
+function openTarget() {
+	let id;
+	try {
+		id = decodeURIComponent(location.hash.slice(1));
+	} catch {
+		return;
+	}
+	const target = id && document.getElementById(id);
+	if (!target) {
+		return;
+	}
+	let opened = false;
+	for (let d = target.closest("details"); d; d = d.parentElement.closest("details")) {
+		opened ||= !d.open;
+		d.open = true;
+	}
+	if (opened) {
+		target.scrollIntoView();
+	}
+}
+addEventListener("hashchange", openTarget);
+openTarget();
+</script>
 </body>
 </html>
 `))
@@ -63,6 +90,11 @@ func renderPage(title string, body template.HTML) ([]byte, error) {
 // links other than to the web or within the page. For the same reason the
 // text is kept as it is: no smart quotes and dashes, which would make
 // --flag –flag, and no emoji.
+//
+// A heading below the title starts a section that folds, up to the next
+// heading of its level or above. A heading without {#id} gets the id GitHub
+// gives it, so that a link to #vet-1-finding leads to it here as it does
+// there.
 func renderMarkdown(md, root string, link linker) template.HTML {
 	p := &markdown.Parser{
 		HeadingID:     true,
@@ -72,6 +104,7 @@ func renderMarkdown(md, root string, link linker) template.HTML {
 		Table:         true,
 	}
 	doc := p.Parse(md)
+	headingIDs(doc.Blocks) // before the rewriter makes text of HTML tags
 	r := &rewriter{link: link, files: map[string]bool{}}
 	if root != "" && link != nil {
 		r.root, _ = os.OpenRoot(root) // no root, no links
@@ -81,7 +114,109 @@ func renderMarkdown(md, root string, link linker) template.HTML {
 	}
 	r.blocks(doc.Blocks)
 	// The parser escapes the text, and the HTML of the Markdown is text now.
-	return template.HTML(markdown.ToHTML(doc))
+	var b strings.Builder
+	writeSections(&b, doc.Blocks)
+	return template.HTML(b.String())
+}
+
+// writeSections writes the HTML of the blocks, each heading of level 2 and
+// below with what follows it, up to the next heading of its level or above,
+// in a details element that is open, the heading being its summary.
+func writeSections(b *strings.Builder, bs []markdown.Block) {
+	for i := 0; i < len(bs); {
+		h, ok := bs[i].(*markdown.Heading)
+		if !ok || h.Level < 2 {
+			b.WriteString(markdown.ToHTML(bs[i]))
+			i++
+			continue
+		}
+		end := i + 1
+		for ; end < len(bs); end++ {
+			if next, ok := bs[end].(*markdown.Heading); ok && next.Level <= h.Level {
+				break
+			}
+		}
+		b.WriteString("<details open>\n<summary>")
+		b.WriteString(strings.TrimSuffix(markdown.ToHTML(h), "\n"))
+		b.WriteString("</summary>\n")
+		writeSections(b, bs[i+1:end])
+		b.WriteString("</details>\n")
+		i = end
+	}
+}
+
+// headingIDs gives each heading that has no id the one GitHub gives it: the
+// slug of its text, with -1, -2 and so on after it for the second and later
+// headings of the same slug.
+func headingIDs(bs []markdown.Block) {
+	seen := map[string]int{}
+	for _, b := range bs {
+		h, ok := b.(*markdown.Heading)
+		if !ok || h.ID != "" || h.Text == nil {
+			continue
+		}
+		id := slug(plainText(h.Text.Inline))
+		if id == "" {
+			continue
+		}
+		h.ID = id
+		if n := seen[id]; n > 0 {
+			h.ID = id + "-" + strconv.Itoa(n)
+		}
+		seen[id]++
+	}
+}
+
+// slug returns the id GitHub makes of the text of a heading: the text in
+// lower case, with a hyphen for each space and without what is not a
+// letter, a digit, a hyphen or an underscore.
+func slug(text string) string {
+	var b strings.Builder
+	for _, c := range strings.ToLower(strings.TrimSpace(text)) {
+		switch {
+		case c == ' ':
+			b.WriteByte('-')
+		case c == '-' || unicode.IsLetter(c) || unicode.IsMark(c) ||
+			unicode.IsDigit(c) || unicode.Is(unicode.Pc, c):
+			b.WriteRune(c)
+		}
+	}
+	return b.String()
+}
+
+// plainText returns the text of inlines as a reader sees it, without the
+// marks of Markdown and without HTML tags.
+func plainText(in markdown.Inlines) string {
+	var b strings.Builder
+	var walk func(markdown.Inlines)
+	walk = func(in markdown.Inlines) {
+		for _, x := range in {
+			switch x := x.(type) {
+			case *markdown.Plain:
+				b.WriteString(x.Text)
+			case *markdown.Escaped:
+				b.WriteString(x.Text)
+			case *markdown.Code:
+				b.WriteString(x.Text)
+			case *markdown.AutoLink:
+				b.WriteString(x.Text)
+			case *markdown.Strong:
+				walk(x.Inner)
+			case *markdown.Emph:
+				walk(x.Inner)
+			case *markdown.Del:
+				walk(x.Inner)
+			case *markdown.Link:
+				walk(x.Inner)
+			case *markdown.Image:
+				walk(x.Inner)
+			case *markdown.SoftBreak, *markdown.HardBreak:
+				b.WriteByte(' ')
+			}
+		}
+	}
+	walk(in)
+	return b.String()
 }
 
 // A rewriter makes links of the positions in a document and takes out what

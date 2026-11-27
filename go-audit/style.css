@@ -129,6 +129,28 @@ blockquote {
 	background: var(--mark);
 }
 
+/* A section of a report folds: its heading is the summary of a details
+   element, with a mark in front that turns when it opens. */
+summary {
+	cursor: pointer;
+	list-style: none;
+}
+
+summary::-webkit-details-marker {
+	display: none;
+}
+
+summary > :is(h2, h3, h4, h5, h6)::before {
+	content: "▸";
+	display: inline-block;
+	width: 1em;
+	color: var(--muted);
+}
+
+details[open] > summary > :is(h2, h3, h4, h5, h6)::before {
+	content: "▾";
+}
+
 /* The pages of go-audit web: the path to a page, and a file of a module
    with the findings of a report under its lines. */
 nav {

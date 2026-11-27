@@ -227,6 +227,11 @@ report: into the editor of the config, or to the file itself without one.
 HTML in a report is shown as text, and so is a link anywhere but to the web,
 to mail or within the page, as a report quotes what tools print about code.
 
+Each section of the page folds, its heading opening and closing it. A
+heading has the id GitHub gives it, so that #vet-1-finding leads to the
+findings of vet; in the table of an audit, a check with findings links to
+them, and a link opens the section it leads to.
+
 # Browsing the store
 
 go-audit web serves the store on localhost:8781, or the address -a gives, and
