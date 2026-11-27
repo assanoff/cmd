@@ -338,6 +338,13 @@ func TestAuditConcurrency(t *testing.T) {
 		if got := mostAtOnce(ev); got != c {
 			t.Errorf("-c %d: %d checks ran at once", c, got)
 		}
+		// One at a time, they run in the order of the config too.
+		started := slices.SortedFunc(maps.Keys(ev), func(x, y string) int {
+			return cmp.Compare(ev[x][0], ev[y][0])
+		})
+		if c == 1 && !slices.Equal(started, []string{"a", "b", "c", "d"}) {
+			t.Errorf("-c 1: the checks started in the order %v", started)
+		}
 		if union, sum := busy(ev); c > 1 && union >= sum {
 			t.Errorf("-c %d: the checks took %v, no less than the %v of their sleeps one after another",
 				c, union, sum)

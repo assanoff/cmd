@@ -391,6 +391,11 @@ func (a *audit) runChecks(p *printer, checks []*check) []*result {
 	results := make([]*result, len(checks))
 	done := make([]chan struct{}, len(checks))
 	slots := make(chan struct{}, a.concurrency)
+	// turn is closed once the check before has taken a slot or given up, so
+	// that the checks take the slots in the order of the config, not in the
+	// order the scheduler happens to run their goroutines.
+	turn := make(chan struct{})
+	close(turn)
 	var wg sync.WaitGroup
 	for i, ch := range checks {
 		r := &result{check: ch}
@@ -409,12 +414,17 @@ func (a *audit) runChecks(p *printer, checks []*check) []*result {
 			close(done[i])
 			continue
 		}
+		wait, next := turn, make(chan struct{})
+		turn = next
 		wg.Go(func() {
 			defer close(done[i])
+			<-wait
 			select {
 			case slots <- struct{}{}:
+				close(next)
 				defer func() { <-slots }()
 			case <-a.ctx.Done():
+				close(next)
 				r.status = statusInterrupted
 				return
 			}
