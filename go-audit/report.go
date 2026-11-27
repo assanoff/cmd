@@ -6,6 +6,7 @@ package main
 
 import (
 	"bufio"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -17,20 +18,22 @@ import (
 )
 
 // An auditReport is the JSON twin of a go-audit report: the fields every
-// report has, then those of an audit.
+// report has, then those of an audit. TestsLeftOut is new in v0.4.0, which
+// left the tests out by default; before, they were in but with -no-tests.
 type auditReport struct {
 	report
 
-	Packages    []string      `json:"packages"`
-	Files       []string      `json:"files,omitempty"` // the files named, if any
-	Scope       string        `json:"scope,omitempty"` // the flags that set it
-	Go          string        `json:"go"`
-	Config      string        `json:"config"`
-	Concurrency int           `json:"concurrency"`
-	Wall        float64       `json:"wall"`
-	Logs        string        `json:"logs"`
-	Checks      []checkReport `json:"checks"`
-	Findings    []finding     `json:"findings"`
+	Packages     []string      `json:"packages"`
+	Files        []string      `json:"files,omitempty"`          // the files named, if any
+	Scope        string        `json:"scope,omitempty"`          // the flags that set it
+	TestsLeftOut bool          `json:"tests_left_out,omitempty"` // the _test.go files but those named
+	Go           string        `json:"go"`
+	Config       string        `json:"config"`
+	Concurrency  int           `json:"concurrency"`
+	Wall         float64       `json:"wall"`
+	Logs         string        `json:"logs"`
+	Checks       []checkReport `json:"checks"`
+	Findings     []finding     `json:"findings"`
 }
 
 // A checkReport is how one check went.
@@ -94,15 +97,16 @@ func (a *audit) report(results []*result, wall time.Duration) *auditReport {
 			Time:   a.time,
 			Label:  a.label(),
 		},
-		Packages:    a.packages,
-		Files:       a.named,
-		Scope:       strings.Join(a.scopeFlags, " "),
-		Go:          goVersion,
-		Config:      a.cfg.source(),
-		Concurrency: a.concurrency,
-		Wall:        wall.Round(time.Millisecond).Seconds(),
-		Logs:        a.logs,
-		Findings:    []finding{},
+		Packages:     a.packages,
+		Files:        a.named,
+		Scope:        strings.Join(a.scopeFlags, " "),
+		TestsLeftOut: a.testsLeftOut(),
+		Go:           goVersion,
+		Config:       a.cfg.source(),
+		Concurrency:  a.concurrency,
+		Wall:         wall.Round(time.Millisecond).Seconds(),
+		Logs:         a.logs,
+		Findings:     []finding{},
 	}
 	for _, r := range results {
 		c := checkReport{
@@ -187,15 +191,25 @@ func readLines(path string) []string {
 
 // auditMarkdown renders the report for people: a header, a table of the checks,
 // and a section with the findings of each check that has some, each with
-// its line of code.
+// its line of code. The table links to the sections, and a section with
+// groups of findings by rule has a table that links to them.
 func auditMarkdown(rep *auditReport) string {
 	var b strings.Builder
 	p := func(format string, args ...any) { fmt.Fprintf(&b, format, args...) }
 
-	p("# go-audit: %s\n\n", rep.Module)
+	title := "go-audit: " + rep.Module
+	sections := checkSections(rep, title)
+	p("# %s\n\n", headingEscaper.Replace(title))
 	p("- **Packages:** `%s` in `%s`\n", strings.Join(rep.Packages, " "), rep.Root)
-	if len(rep.Files) > 0 || rep.Scope != "" {
-		p("- **Scope:** `%s`\n", strings.TrimSpace(strings.Join(rep.Files, " ")+" "+rep.Scope))
+	var scope []string
+	if what := strings.TrimSpace(strings.Join(rep.Files, " ") + " " + rep.Scope); what != "" {
+		scope = append(scope, "`"+what+"`")
+	}
+	if rep.TestsLeftOut {
+		scope = append(scope, "`_test.go` files left out, -tests takes them in")
+	}
+	if len(scope) > 0 {
+		p("- **Scope:** %s\n", strings.Join(scope, " · "))
 	}
 	p("- **Time:** %s · **Go:** %s · **Wall:** %s with -c %d\n",
 		rep.Time.Format("2006-01-02 15:04:05 -07:00"), orDash(rep.Go),
@@ -203,10 +217,14 @@ func auditMarkdown(rep *auditReport) string {
 	p("- **Config:** %s · **Logs:** `%s`\n\n", rep.Config, rep.Logs)
 
 	p("| Check | Status | Findings | Time | Note |\n|---|---|---:|---:|---|\n")
+	ids := map[string]string{} // check → the id of its section
+	for _, s := range sections {
+		ids[s.check.Name] = s.id
+	}
 	for _, c := range rep.Checks {
-		name, count, took := c.Name, "–", "–"
-		if c.Count > 0 {
-			name = fmt.Sprintf("[%s](#%s)", c.Name, slug(checkHeading(c)))
+		name, count, took := cell(c.Name), "–", "–"
+		if id := ids[c.Name]; id != "" {
+			name = fmt.Sprintf("[%s](#%s)", name, id)
 		}
 		if c.Status == statusOK || c.Count > 0 {
 			count = fmt.Sprint(c.Count)
@@ -217,47 +235,191 @@ func auditMarkdown(rep *auditReport) string {
 		p("| %s | %s | %s | %s | %s |\n", name, c.Status, count, took, cell(c.Note))
 	}
 
-	for _, c := range rep.Checks {
-		if c.Count == 0 {
+	for _, s := range sections {
+		p("\n## %s\n\n", headingEscaper.Replace(s.heading))
+		if s.check.Note != "" {
+			p("%s\n\n", inline(s.check.Note))
+		}
+		if s.groups == nil {
+			writeFindings(&b, s.findings, true)
 			continue
 		}
-		p("\n## %s\n\n", checkHeading(c))
-		if c.Note != "" {
-			p("%s\n\n", inline(c.Note))
+		p("| Rule | Findings |\n|---|---:|\n")
+		for _, g := range s.groups {
+			p("| [%s](#%s) | %d |\n", cell(g.name()), g.id, len(g.findings))
 		}
-		for _, f := range rep.Findings {
-			if f.Check == c.Name {
-				writeFinding(&b, f)
-			}
+		for _, g := range s.groups {
+			p("\n### %s\n\n", headingEscaper.Replace(g.heading))
+			writeFindings(&b, g.findings, false)
 		}
 	}
 	return blankLines.ReplaceAllString(b.String(), "\n\n")
 }
 
-// checkHeading returns the heading of the section of a check with findings.
-// The line of the check in the table links to it by the id GitHub gives it,
-// as the page of the report does.
-func checkHeading(c checkReport) string {
-	return fmt.Sprintf("%s: %d %s", c.Name, c.Count, plural(c.Count, "finding"))
+// A checkSection is the section of a check with findings in the report: its
+// heading and its id, and the findings, in groups by rule or not.
+type checkSection struct {
+	check       checkReport
+	heading, id string
+	findings    []finding
+	groups      []ruleGroup // nil: the findings in one list
 }
+
+// A ruleGroup is the findings of one rule of a check, "" for those of none.
+type ruleGroup struct {
+	rule        string
+	heading, id string
+	findings    []finding
+}
+
+func (g ruleGroup) name() string { return cmp.Or(g.rule, "other") }
+
+// checkSections returns the sections of the checks with findings, with the
+// ids their headings get on the page of the report, which has title for its
+// title: the ids come from the order of the headings.
+func checkSections(rep *auditReport, title string) []checkSection {
+	ids := slugger{}
+	ids.id(title)
+	var sections []checkSection
+	for _, c := range rep.Checks {
+		if c.Count == 0 {
+			continue
+		}
+		s := checkSection{check: c, heading: findingsHeading(c.Name, c.Count)}
+		s.id = ids.id(s.heading)
+		for _, f := range rep.Findings {
+			if f.Check == c.Name {
+				s.findings = append(s.findings, f)
+			}
+		}
+		s.groups = groupByRule(s.findings)
+		for i, g := range s.groups {
+			s.groups[i].heading = findingsHeading(g.name(), len(g.findings))
+			s.groups[i].id = ids.id(s.groups[i].heading)
+		}
+		sections = append(sections, s)
+	}
+	return sections
+}
+
+// groupByRule returns the findings by rule, the rules with the most first
+// and the findings of no rule last, or nil when groups would not help: the
+// findings are of one rule, or of a rule each.
+func groupByRule(findings []finding) []ruleGroup {
+	var groups []ruleGroup
+	at := map[string]int{} // rule → its group
+	for _, f := range findings {
+		i, ok := at[f.Rule]
+		if !ok {
+			i = len(groups)
+			at[f.Rule] = i
+			groups = append(groups, ruleGroup{rule: f.Rule})
+		}
+		groups[i].findings = append(groups[i].findings, f)
+	}
+	if len(groups) < 2 || len(groups) == len(findings) {
+		return nil
+	}
+	slices.SortStableFunc(groups, func(a, b ruleGroup) int {
+		if (a.rule == "") != (b.rule == "") {
+			return cmp.Compare(b.rule, a.rule) // "" last
+		}
+		return cmp.Or(cmp.Compare(len(b.findings), len(a.findings)), cmp.Compare(a.rule, b.rule))
+	})
+	return groups
+}
+
+// findingsHeading returns the heading of the findings of a check or a rule.
+func findingsHeading(name string, n int) string {
+	return fmt.Sprintf("%s: %d %s", name, n, plural(n, "finding"))
+}
+
+// headingEscaper escapes what Markdown would take for emphasis, code, a link
+// or HTML in a heading, so that the text of the heading on the page is the
+// text the report links to by its id.
+var headingEscaper = strings.NewReplacer(
+	`\`, `\\`, `*`, `\*`, `_`, `\_`, "`", "\\`", `[`, `\[`, `]`, `\]`, `<`, `\<`)
 
 // blankLines matches more than one blank line.
 var blankLines = regexp.MustCompile(`\n{3,}`)
 
-// writeFinding writes one finding as a list item: where, what and the rule,
-// with the line of code under it.
-func writeFinding(b *strings.Builder, f finding) {
+// writeFindings writes findings as a list. The start of their messages that
+// they share, when it says something by itself, goes above the list once,
+// as gostyle repeats the text of its rule in every finding; a list of a
+// check gives the rule of each finding, a list of a rule does not.
+func writeFindings(b *strings.Builder, findings []finding, rules bool) {
+	msgs := make([]string, len(findings))
+	placed := true // each finding has a place to show in its item
+	for i, f := range findings {
+		// A message of several lines, as nilaway prints its nil flows, goes
+		// into one; the .json keeps it as it was.
+		msgs[i] = strings.Join(strings.Fields(f.Message), " ")
+		placed = placed && position(f) != ""
+	}
+	common := ""
+	if placed {
+		common = commonStart(msgs)
+	}
+	if common != "" {
+		fmt.Fprintf(b, "%s\n\n", inline(common))
+	}
+	for i, f := range findings {
+		rule := ""
+		if rules {
+			rule = f.Rule
+		}
+		writeFinding(b, f, strings.TrimSpace(msgs[i][len(common):]), rule)
+	}
+}
+
+// commonStart returns the start that all the messages share, up to the end
+// of a word, when there are several: all of each when they are the same, and
+// otherwise as long as it is 20 bytes or more, short of which it says too
+// little by itself; "" when there is none such.
+func commonStart(msgs []string) string {
+	if len(msgs) < 2 {
+		return ""
+	}
+	start := msgs[0]
+	for _, m := range msgs[1:] {
+		n := 0
+		for n < len(start) && n < len(m) && start[n] == m[n] {
+			n++
+		}
+		start = start[:n]
+	}
+	same, atWord := true, true
+	for _, m := range msgs {
+		if len(m) > len(start) {
+			same = false
+			atWord = atWord && m[len(start)] == ' '
+		}
+	}
+	if same {
+		return start
+	}
+	if !atWord {
+		// The start ends within a word: back to the space before it.
+		start = start[:max(strings.LastIndexByte(start, ' '), 0)]
+	}
+	if start = strings.TrimSpace(start); len(start) < 20 {
+		return ""
+	}
+	return start
+}
+
+// writeFinding writes one finding as a list item: where, the message and the
+// rule, if any, with the line of code under it.
+func writeFinding(b *strings.Builder, f finding, msg, rule string) {
 	var item []string
 	if pos := position(f); pos != "" {
 		item = append(item, "`"+pos+"`")
 	}
-	// A message of several lines, as nilaway prints its nil flows, goes
-	// into one; the .json keeps it as it was.
-	if msg := strings.Join(strings.Fields(f.Message), " "); msg != "" {
+	if msg != "" {
 		item = append(item, inline(msg))
 	}
-	if f.Rule != "" {
-		item = append(item, "("+inline(f.Rule)+")")
+	if rule != "" {
+		item = append(item, "("+inline(rule)+")")
 	}
 	fmt.Fprintf(b, "- %s\n", strings.Join(item, " "))
 	if src := strings.TrimSpace(f.Source); src != "" {

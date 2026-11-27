@@ -228,7 +228,7 @@ func (s *web) list(w http.ResponseWriter, title, mod string, reports []*report) 
 // report serves a report, its file:line links leading to the pages of the
 // files.
 func (s *web) report(w http.ResponseWriter, r *report) {
-	md, err := s.read(r.path)
+	md, err := reportMarkdown(r, s.read)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

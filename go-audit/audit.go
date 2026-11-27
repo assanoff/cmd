@@ -20,14 +20,14 @@ import (
 )
 
 // auditUsage is the usage line of go-audit running its checks.
-const auditUsage = "[-c N] [-only a,b] [-skip a,b] [-no-tests]\n" +
+const auditUsage = "[-c N] [-only a,b] [-skip a,b] [-tests]\n" +
 	"                [-diff rev] [-staged] [-unstaged] [-whole-files] [packages | files]"
 
 // auditOptions are the flags of go-audit running its checks.
 type auditOptions struct {
 	concurrency int
 	only, skip  string
-	noTests     bool
+	tests       bool   // the findings in _test.go files as well
 	diff        string // a revision to report the lines changed since
 	staged      bool
 	unstaged    bool
@@ -40,7 +40,8 @@ func auditCommand() *command {
 	fs.IntVar(&o.concurrency, "c", 1, "run up to `N` checks at a time")
 	fs.StringVar(&o.only, "only", "", "run only the checks `a,b`, those that are off as well")
 	fs.StringVar(&o.skip, "skip", "", "run all checks but `a,b`")
-	fs.BoolVar(&o.noTests, "no-tests", false, "leave out the findings in _test.go files")
+	fs.BoolVar(&o.tests, "tests", false,
+		"report the findings in _test.go files too; without it, only in those named")
 	fs.StringVar(&o.diff, "diff", "",
 		"report only the lines changed since `rev`, committed or not, and new files")
 	fs.BoolVar(&o.staged, "staged", false, "report only the lines changed in the index")
@@ -56,6 +57,12 @@ func auditCommand() *command {
 			return runAudit(ctx, &o, args)
 		},
 	}
+}
+
+// testsLeftOut reports whether the audit leaves out the findings in the
+// _test.go files: without -tests, unless it names the files it is about.
+func (a *audit) testsLeftOut() bool {
+	return !a.scope.tests && a.scope.files == nil
 }
 
 // changes reports whether the options ask for the lines changed in git.
@@ -76,7 +83,7 @@ func (o *auditOptions) scopeFlags() []string {
 		{o.staged, "-staged"},
 		{o.unstaged, "-unstaged"},
 		{o.wholeFiles, "-whole-files"},
-		{o.noTests, "-no-tests"},
+		{o.tests, "-tests"},
 	} {
 		if f.on {
 			flags = append(flags, f.name)
@@ -143,7 +150,7 @@ func runAudit(ctx context.Context, o *auditOptions, args []string) error {
 		time:        time.Now().Truncate(time.Second),
 		concurrency: o.concurrency,
 	}
-	a.scope = scope{noTests: o.noTests, whole: o.wholeFiles}
+	a.scope = scope{tests: o.tests, whole: o.wholeFiles}
 	if len(files) > 0 {
 		a.scope.files = map[string]bool{}
 		for _, f := range files {
@@ -486,8 +493,11 @@ func (p *printer) paint(color, s string) string {
 }
 
 func (p *printer) header(a *audit) {
-	_, _ = fmt.Fprintf(p.w, "%s %s\n", p.paint(bold, a.mod.path),
-		p.paint(dim, "· "+a.label()+" · "+a.mod.root))
+	what := "· " + a.label() + " · " + a.mod.root
+	if a.testsLeftOut() {
+		what += " · _test.go left out"
+	}
+	_, _ = fmt.Fprintf(p.w, "%s %s\n", p.paint(bold, a.mod.path), p.paint(dim, what))
 }
 
 func (p *printer) name(width int, name string) {

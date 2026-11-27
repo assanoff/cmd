@@ -73,8 +73,8 @@ func TestSubstitutions(t *testing.T) {
 		skip string
 	}{
 		{[]string{"go", "vet", "{packages}"}, []string{"go", "vet", "./..."}, ""},
-		{[]string{"go", "{files}"}, append([]string{"go"},
-			files("a.go", "a_test.go", "sub/b.go", "x_test.go")...), ""},
+		// {files} leaves out the tests the report leaves out.
+		{[]string{"go", "{files}"}, append([]string{"go"}, files("a.go", "sub/b.go")...), ""},
 		{[]string{"go", "-include-pkgs={module}"}, []string{"go", "-include-pkgs=example.com/m"}, ""},
 		{
 			[]string{"go", "-vettool={gotooldir}/fix"},
@@ -114,6 +114,23 @@ func TestSubstitutions(t *testing.T) {
 		if !slices.Equal(argv, tt.want) {
 			t.Errorf("command %q = %q, want %q", tt.cmd, argv, tt.want)
 		}
+	}
+
+	// With -tests, {files} has the tests too.
+	withTests := testAudit(t, root)
+	withTests.scope.tests = true
+	argv, _, err := withTests.command(&check{Name: "x", Cmd: []string{"go", "{files}"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, arg := range argv {
+		if r, err := filepath.EvalSymlinks(arg); err == nil && filepath.IsAbs(arg) {
+			argv[i] = r
+		}
+	}
+	want := append([]string{"go"}, files("a.go", "a_test.go", "sub/b.go", "x_test.go")...)
+	if !slices.Equal(argv, want) {
+		t.Errorf("-tests: {files} = %q, want %q", argv, want)
 	}
 
 	// Without a golangci.yml in the store, the built-in one is in the logs.

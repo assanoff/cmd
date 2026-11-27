@@ -194,7 +194,7 @@ Files, tests and changes in git narrow the report, its scope:
 
 ```sh
 go-audit internal/store/store.go       # the findings in these files
-go-audit -no-tests                     # all but those in _test.go files
+go-audit -tests                        # and in the _test.go files
 go-audit -staged                       # on the lines in the index
 go-audit -unstaged                     # on the lines changed since, and in new files
 go-audit -diff origin/master           # on the lines of the branch, committed or not
@@ -203,7 +203,9 @@ go-audit -staged -whole-files          # anywhere in the staged files
 
 The checks still run over the packages, `./...` by default, since most tools
 take nothing smaller and deadcode needs the whole program; the report keeps
-the findings in scope and the line of each check counts the rest. A scope with
+the findings in scope and the line of each check counts the rest. The findings
+in `_test.go` files are left out unless `-tests` takes them in or the files are
+named: a report is about the code that ships by default. A scope with
 no Go file in it exits 0 with no report, so `go-audit -staged` can sit in a
 pre-commit hook.
 

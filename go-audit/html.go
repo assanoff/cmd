@@ -7,6 +7,7 @@ package main
 import (
 	"bytes"
 	_ "embed"
+	"fmt"
 	"html/template"
 	"net/url"
 	"os"
@@ -115,16 +116,22 @@ func renderMarkdown(md, root string, link linker) template.HTML {
 	r.blocks(doc.Blocks)
 	// The parser escapes the text, and the HTML of the Markdown is text now.
 	var b strings.Builder
-	writeSections(&b, doc.Blocks)
+	writeSections(&b, doc.Blocks, "top")
 	return template.HTML(b.String())
 }
 
 // writeSections writes the HTML of the blocks, each heading of level 2 and
 // below with what follows it, up to the next heading of its level or above,
-// in a details element that is open, the heading being its summary.
-func writeSections(b *strings.Builder, bs []markdown.Block) {
+// in a details element that is open, the heading being its summary. The
+// heading links up to the one its section is in, up to the parent id: to the
+// title for a section of the top level, or to the top of the page without
+// one ("top" is the top of any page).
+func writeSections(b *strings.Builder, bs []markdown.Block, parent string) {
 	for i := 0; i < len(bs); {
 		h, ok := bs[i].(*markdown.Heading)
+		if ok && h.Level < 2 && h.ID != "" {
+			parent = h.ID
+		}
 		if !ok || h.Level < 2 {
 			b.WriteString(markdown.ToHTML(bs[i]))
 			i++
@@ -136,35 +143,51 @@ func writeSections(b *strings.Builder, bs []markdown.Block) {
 				break
 			}
 		}
+		heading := strings.TrimSuffix(markdown.ToHTML(h), "\n")
+		closing := heading[strings.LastIndex(heading, "</"):]
 		b.WriteString("<details open>\n<summary>")
-		b.WriteString(strings.TrimSuffix(markdown.ToHTML(h), "\n"))
-		b.WriteString("</summary>\n")
-		writeSections(b, bs[i+1:end])
+		b.WriteString(strings.TrimSuffix(heading, closing))
+		fmt.Fprintf(b, ` <a class="up" href="#%s" title="up">↑</a>`, template.HTMLEscapeString(parent))
+		b.WriteString(closing + "</summary>\n")
+		inner := parent
+		if h.ID != "" {
+			inner = h.ID
+		}
+		writeSections(b, bs[i+1:end], inner)
 		b.WriteString("</details>\n")
 		i = end
 	}
 }
 
-// headingIDs gives each heading that has no id the one GitHub gives it: the
-// slug of its text, with -1, -2 and so on after it for the second and later
-// headings of the same slug.
+// headingIDs gives each heading that has no id the one GitHub gives it.
 func headingIDs(bs []markdown.Block) {
-	seen := map[string]int{}
+	ids := slugger{}
 	for _, b := range bs {
-		h, ok := b.(*markdown.Heading)
-		if !ok || h.ID != "" || h.Text == nil {
-			continue
+		if h, ok := b.(*markdown.Heading); ok && h.ID == "" && h.Text != nil {
+			h.ID = ids.id(plainText(h.Text.Inline))
 		}
-		id := slug(plainText(h.Text.Inline))
-		if id == "" {
-			continue
-		}
-		h.ID = id
-		if n := seen[id]; n > 0 {
-			h.ID = id + "-" + strconv.Itoa(n)
-		}
-		seen[id]++
 	}
+}
+
+// A slugger gives headings, in the order they come, the ids GitHub gives
+// them: the slug of the text, with -1, -2 and so on after it for the second
+// and later headings of the same slug. The report of an audit links to its
+// headings with one, as the page of the report gives them their ids with
+// another.
+type slugger map[string]int
+
+// id returns the id of the next heading with the text, "" for none.
+func (s slugger) id(text string) string {
+	id := slug(text)
+	if id == "" {
+		return ""
+	}
+	n := s[id]
+	s[id]++
+	if n > 0 {
+		return id + "-" + strconv.Itoa(n)
+	}
+	return id
 }
 
 // slug returns the id GitHub makes of the text of a heading: the text in

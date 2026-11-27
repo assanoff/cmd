@@ -98,9 +98,10 @@ func TestScope(t *testing.T) {
 		scope scope
 		in    []finding
 	}{
-		{"all", scope{}, []finding{code, test, module, whole, other}},
-		{"no tests", scope{noTests: true}, []finding{code, module, whole, other}},
+		{"all", scope{tests: true}, []finding{code, test, module, whole, other}},
+		{"no tests", scope{}, []finding{code, module, whole, other}},
 		{"files", scope{files: map[string]bool{"a.go": true}}, []finding{code, whole}},
+		{"a test named", scope{files: map[string]bool{"a_test.go": true}}, []finding{test}},
 		{
 			"changed lines",
 			scope{changes: map[string][]lineRange{"a.go": {{4, 6}}, "b.go": {{9, 9}}}},
@@ -126,15 +127,31 @@ func TestScope(t *testing.T) {
 	}
 
 	r := &result{status: statusFound, findings: []finding{test}, note: "a note"}
-	s := scope{noTests: true}
+	s := scope{}
 	s.filter(r)
-	if r.status != statusOK || len(r.findings) != 0 || r.note != "a note · 1 out of scope" {
+	if r.status != statusOK || len(r.findings) != 0 ||
+		r.note != "a note · 1 in _test.go files, -tests shows them" {
 		t.Errorf("a check with only tests found: %+v", r)
 	}
 	r = &result{status: statusError, findings: []finding{test, code}}
 	s.filter(r)
-	if r.status != statusError || len(r.findings) != 1 || r.note != "1 out of scope" {
+	if r.status != statusError || len(r.findings) != 1 ||
+		r.note != "1 in _test.go files, -tests shows them" {
 		t.Errorf("a failed check: %+v", r)
+	}
+	// A test that -tests would not take in either is just out of scope.
+	r = &result{status: statusFound, findings: []finding{test, other, code}}
+	s = scope{changes: map[string][]lineRange{"a.go": {{5, 5}}, "a_test.go": {{5, 5}}}}
+	s.filter(r)
+	if r.status != statusFound || len(r.findings) != 1 ||
+		r.note != "1 out of scope · 1 in _test.go files, -tests shows them" {
+		t.Errorf("tests and other files out of scope: %+v", r)
+	}
+	r = &result{status: statusFound, findings: []finding{test, code}}
+	s = scope{files: map[string]bool{"a.go": true}}
+	s.filter(r)
+	if r.note != "1 out of scope" {
+		t.Errorf("a test not named: note %q, want it out of scope", r.note)
 	}
 }
 
@@ -349,18 +366,40 @@ func TestAuditScope(t *testing.T) {
 	writeFile(t, "a_test.go", "package m\n")
 	writeFile(t, "b.go", "package m\n")
 
-	_, err := auditWith(t, t.Context(), auditOptions{concurrency: 1, noTests: true})
+	out, err := auditWith(t, t.Context(), auditOptions{concurrency: 1})
 	if !errors.Is(err, exitStatus(1)) {
-		t.Errorf("-no-tests: err = %v, want exit status 1", err)
+		t.Errorf("no -tests: err = %v, want exit status 1", err)
 	}
-	rep, md := auditReportOf(t, store, "./... -no-tests")
+	if !strings.Contains(out, " · _test.go left out\n") {
+		t.Errorf("no -tests: the summary does not say the tests are left out:\n%s", out)
+	}
+	rep, md := auditReportOf(t, store, "./...")
 	want := []checkReport{
-		{Name: "lint", Status: statusFound, Count: 1, Note: "1 out of scope"},
+		{Name: "lint", Status: statusFound, Count: 1, Note: "1 in _test.go files, -tests shows them"},
 		{Name: "tidy", Status: statusFound, Count: 1},
 	}
-	checkReports(t, "-no-tests", rep, want)
-	if text, _ := os.ReadFile(md); !strings.Contains(string(text), "- **Scope:** `-no-tests`\n") {
-		t.Errorf("-no-tests: the report does not show the scope:\n%s", text)
+	checkReports(t, "no -tests", rep, want)
+	if !rep.TestsLeftOut {
+		t.Error("no -tests: the report does not say the tests are left out")
+	}
+	text, _ := os.ReadFile(md)
+	if !strings.Contains(string(text), "- **Scope:** `_test.go` files left out, -tests takes them in\n") {
+		t.Errorf("no -tests: the report does not show the scope:\n%s", text)
+	}
+
+	out, err = auditWith(t, t.Context(), auditOptions{concurrency: 1, tests: true})
+	if !errors.Is(err, exitStatus(1)) || strings.Contains(out, "left out") {
+		t.Errorf("-tests: err = %v, want exit status 1, and the tests in:\n%s", err, out)
+	}
+	rep, md = auditReportOf(t, store, "./... -tests")
+	want = []checkReport{
+		{Name: "lint", Status: statusFound, Count: 2},
+		{Name: "tidy", Status: statusFound, Count: 1},
+	}
+	checkReports(t, "-tests", rep, want)
+	if text, _ := os.ReadFile(md); rep.TestsLeftOut ||
+		!strings.Contains(string(text), "- **Scope:** `-tests`\n") {
+		t.Errorf("-tests: the report shows the scope wrong:\n%s", text)
 	}
 
 	if _, err := auditWith(t, t.Context(), auditOptions{concurrency: 1}, "b.go"); err != nil {
@@ -376,12 +415,34 @@ func TestAuditScope(t *testing.T) {
 		t.Errorf("b.go: packages %q, files %q", rep.Packages, rep.Files)
 	}
 
-	o := auditOptions{concurrency: 1, noTests: true}
-	out, err := auditWith(t, t.Context(), o, "a_test.go")
-	if err != nil || !strings.Contains(out, "no Go files in scope, nothing to check") {
-		t.Errorf("-no-tests a_test.go = %q, %v; want nothing to check", out, err)
+	// A test named is in without -tests.
+	_, err = auditWith(t, t.Context(), auditOptions{concurrency: 1}, "a_test.go")
+	if !errors.Is(err, exitStatus(1)) {
+		t.Errorf("a_test.go: err = %v, want exit status 1", err)
 	}
-	if reports, _ := loadReports(store); len(reports) != 2 {
+	rep, _ = auditReportOf(t, store, "a_test.go")
+	want = []checkReport{
+		{Name: "lint", Status: statusFound, Count: 1, Note: "1 out of scope"},
+		{Name: "tidy", Status: statusOK, Count: 0, Note: "1 out of scope"},
+	}
+	checkReports(t, "a_test.go", rep, want)
+	if rep.TestsLeftOut {
+		t.Error("a_test.go: the report says the tests are left out")
+	}
+
+	// Only tests staged: nothing to check without -tests.
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git in PATH")
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	gitRun(t, ".", "init", "-q")
+	gitRun(t, ".", "add", "a_test.go")
+	out, err = auditWith(t, t.Context(), auditOptions{concurrency: 1, staged: true})
+	if err != nil || !strings.Contains(out, "no Go files in scope, nothing to check") {
+		t.Errorf("-staged with a test staged = %q, %v; want nothing to check", out, err)
+	}
+	if reports, _ := loadReports(store); len(reports) != 4 {
 		t.Errorf("a run with nothing to check wrote a report: %d reports", len(reports))
 	}
 }

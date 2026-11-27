@@ -13,16 +13,16 @@ import (
 	"strings"
 )
 
-// A scope is what of the findings an audit reports: all of them, or those
-// in the files named, in the lines that changed in git, or in all files but
-// the tests. The checks run over the packages all the same, as most tools
-// take nothing smaller than a package and some need the whole program; the
-// scope only leaves findings out.
+// A scope is what of the findings an audit reports: those in the files
+// named, in the lines that changed in git, or in all files; of the _test.go
+// files only those named, unless tests says all. The checks run over the
+// packages all the same, as most tools take nothing smaller than a package
+// and some need the whole program; the scope only leaves findings out.
 type scope struct {
 	files   map[string]bool        // the files named, module-relative; nil: all
 	changes map[string][]lineRange // the changed lines by file; nil: all lines
 	whole   bool                   // all lines of a changed file, not only those changed
-	noTests bool                   // the _test.go files left out
+	tests   bool                   // the _test.go files in, not only those named
 }
 
 // A lineRange is the lines first to last of a file, both included.
@@ -41,7 +41,7 @@ func (s *scope) narrow() bool {
 // hasFile reports whether the file at the module-relative path is in scope.
 func (s *scope) hasFile(path string) bool {
 	switch {
-	case s.noTests && strings.HasSuffix(path, "_test.go"):
+	case !s.tests && strings.HasSuffix(path, "_test.go") && !s.files[path]:
 		return false
 	case s.files != nil && !s.files[path]:
 		return false
@@ -72,17 +72,34 @@ func (s *scope) has(f finding) bool {
 }
 
 // filter leaves the findings out of scope out of r and says how many in its
-// note; a check that found nothing else is ok.
+// note, those that -tests would keep apart; a check that found nothing else
+// is ok.
 func (s *scope) filter(r *result) {
-	n := len(r.findings)
+	withTests := *s
+	withTests.tests = true
+	out, tests := 0, 0
 	r.findings = slices.DeleteFunc(r.findings, func(f finding) bool {
-		return !s.has(f)
+		switch {
+		case s.has(f):
+			return false
+		case withTests.has(f):
+			tests++
+		default:
+			out++
+		}
+		return true
 	})
-	out := n - len(r.findings)
-	if out == 0 {
+	if out+tests == 0 {
 		return
 	}
-	r.note = strings.TrimPrefix(fmt.Sprintf("%s · %d out of scope", r.note, out), " · ")
+	notes := []string{r.note}
+	if out > 0 {
+		notes = append(notes, fmt.Sprintf("%d out of scope", out))
+	}
+	if tests > 0 {
+		notes = append(notes, fmt.Sprintf("%d in _test.go files, -tests shows them", tests))
+	}
+	r.note = strings.TrimPrefix(strings.Join(notes, " · "), " · ")
 	if r.status == statusFound && len(r.findings) == 0 {
 		r.status = statusOK
 	}

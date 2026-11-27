@@ -9,7 +9,7 @@ its own and those of the go-style Claude Code plugin.
 
 Usage:
 
-	go-audit [-c N] [-only a,b] [-skip a,b] [-no-tests]
+	go-audit [-c N] [-only a,b] [-skip a,b] [-tests]
 	         [-diff rev] [-staged] [-unstaged] [-whole-files] [packages | files]
 	go-audit reports [-n N] [filter]
 	go-audit show [-o file] [report]
@@ -64,7 +64,7 @@ only into the store.
 Some flags and arguments narrow what the report has, its scope:
 
 	go-audit internal/store/store.go cmd/main.go   # these files
-	go-audit -no-tests                             # all but the _test.go files
+	go-audit -tests                                # the _test.go files too
 	go-audit -staged                               # the lines in the index
 	go-audit -unstaged                             # the lines changed since, and new files
 	go-audit -staged -unstaged                     # all that is not committed
@@ -73,8 +73,13 @@ Some flags and arguments narrow what the report has, its scope:
 
 Go files as arguments stand for the packages of their directories, and the
 report keeps the findings in those files alone; as with the go command,
-files and packages do not mix. -no-tests leaves out the findings in
-_test.go files.
+files and packages do not mix.
+
+The report leaves out the findings in _test.go files, so that it is about
+the code that ships, unless -tests takes them in or the files are named. It
+says so in its scope, and the line of each check counts what it left out:
+"12 in _test.go files, -tests shows them". -tests goes with the flags of
+changes too: the tests changed are in only with it.
 
 -staged keeps the findings on the lines that changed in the index since
 HEAD, and -unstaged those on the lines that changed in the working tree and
@@ -227,10 +232,18 @@ report: into the editor of the config, or to the file itself without one.
 HTML in a report is shown as text, and so is a link anywhere but to the web,
 to mail or within the page, as a report quotes what tools print about code.
 
-Each section of the page folds, its heading opening and closing it. A
-heading has the id GitHub gives it, so that #vet-1-finding leads to the
-findings of vet; in the table of an audit, a check with findings links to
-them, and a link opens the section it leads to.
+Each section of the page folds, its heading opening and closing it, and the
+arrow at the end of a heading leads up to the section it is in, or to the
+top. A heading has the id GitHub gives it, so that #vet-1-finding leads to
+the findings of vet; a link opens the section it leads to.
+
+In the report of an audit, the table of the checks links to the findings of
+each. The findings of a check that come under several rules, with more than
+one under some, are in groups by rule, the rule with the most first, and a
+table of the rules at the top of the check links to them. The start that the
+messages of a list share goes above it once, as gostyle repeats the text of
+its rule in each finding. The page of an audit is made from its .json twin,
+so that an older report has the links and the groups as well.
 
 # Browsing the store
 

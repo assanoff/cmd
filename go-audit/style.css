@@ -110,6 +110,11 @@ th {
 	background: var(--panel);
 }
 
+/* A column of numbers, as ---: makes it in Markdown. */
+th[align="right"], td[align="right"] {
+	text-align: right;
+}
+
 ul, ol {
 	padding-left: 1.6em;
 }
@@ -149,6 +154,15 @@ summary > :is(h2, h3, h4, h5, h6)::before {
 
 details[open] > summary > :is(h2, h3, h4, h5, h6)::before {
 	content: "▾";
+}
+
+/* The link up from a section, to the one it is in or to the top. */
+summary a.up {
+	float: right;
+	padding: 0 0.25em;
+	font-size: 0.75em;
+	font-weight: normal;
+	color: var(--muted);
 }
 
 /* The pages of go-audit web: the path to a page, and a file of a module

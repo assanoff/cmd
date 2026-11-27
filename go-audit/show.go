@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -66,7 +67,7 @@ func runShow(ctx context.Context, out, arg string) error {
 	if err != nil {
 		return err
 	}
-	data, err := os.ReadFile(r.path)
+	data, err := reportMarkdown(r, os.ReadFile)
 	if err != nil {
 		return err
 	}
@@ -106,6 +107,23 @@ func runShow(ctx context.Context, out, arg string) error {
 		return err
 	}
 	return openBrowser(abs)
+}
+
+// reportMarkdown returns the Markdown of a report to show, reading its files
+// with read: that of an audit made afresh from its .json twin, so that an
+// older audit reads as a new one does, with the links and the groups of
+// findings it did not have; that of its .md file for a report of go-style,
+// and for an audit whose twin does not read or has no checks in it.
+func reportMarkdown(r *report, read func(string) ([]byte, error)) ([]byte, error) {
+	if r.Kind == "audit" && r.err == nil {
+		if data, err := read(strings.TrimSuffix(r.path, ".md") + ".json"); err == nil {
+			var rep auditReport
+			if json.Unmarshal(data, &rep) == nil && len(rep.Checks) > 0 {
+				return []byte(auditMarkdown(&rep)), nil
+			}
+		}
+	}
+	return read(r.path)
 }
 
 // findReport returns the report that arg names: the path of a report, its
