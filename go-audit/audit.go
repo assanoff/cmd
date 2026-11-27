@@ -72,8 +72,12 @@ func (o *auditOptions) scopeFlags() []string {
 	for _, f := range []struct {
 		on   bool
 		name string
-	}{{o.staged, "-staged"}, {o.unstaged, "-unstaged"},
-		{o.wholeFiles, "-whole-files"}, {o.noTests, "-no-tests"}} {
+	}{
+		{o.staged, "-staged"},
+		{o.unstaged, "-unstaged"},
+		{o.wholeFiles, "-whole-files"},
+		{o.noTests, "-no-tests"},
+	} {
 		if f.on {
 			flags = append(flags, f.name)
 		}

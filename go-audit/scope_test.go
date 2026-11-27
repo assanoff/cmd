@@ -274,12 +274,17 @@ func TestTargets(t *testing.T) {
 	}{
 		{root, nil, []string{"./..."}, nil},
 		{
-			root, []string{"internal/store/store_test.go", "a.go", "./a.go"},
+			root,
+			[]string{"internal/store/store_test.go", "a.go", "./a.go"},
 			[]string{".", "./internal/store"},
 			[]string{"a.go", "internal/store/store_test.go"},
 		},
-		{internal, []string{"store/store.go"}, []string{"./internal/store"},
-			[]string{"internal/store/store.go"}},
+		{
+			internal,
+			[]string{"store/store.go"},
+			[]string{"./internal/store"},
+			[]string{"internal/store/store.go"},
+		},
 		{root, []string{"internal/store"}, []string{"./internal/store"}, nil},
 		{root, []string{"internal/..."}, []string{"./internal/..."}, nil},
 		{internal, []string{"store"}, []string{"./internal/store"}, nil},

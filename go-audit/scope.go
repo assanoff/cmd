@@ -171,9 +171,10 @@ func (a *audit) git(cmd string, args ...string) (string, error) {
 // relative to the module root, the files outside it left out. The prefixes
 // are set, as diff.noprefix and diff.mnemonicPrefix would change them.
 func (a *audit) gitDiff(args ...string) (map[string][]hunk, error) {
-	out, err := a.git("diff", slices.Concat([]string{"--no-color", "--no-ext-diff",
-		"--no-textconv", "--relative", "--unified=0", "--src-prefix=a/", "--dst-prefix=b/"},
-		args, []string{"--", "*.go"})...)
+	out, err := a.git("diff", slices.Concat([]string{
+		"--no-color", "--no-ext-diff", "--no-textconv", "--relative",
+		"--unified=0", "--src-prefix=a/", "--dst-prefix=b/",
+	}, args, []string{"--", "*.go"})...)
 	if err != nil {
 		return nil, err
 	}
