@@ -14,7 +14,7 @@ Usage:
 	prr review [-n] pr...
 	prr wait [pr]
 	prr post [-y] [pr]
-	prr rm pr...
+	prr rm [-forget] pr...
 	prr skill [-install]
 
 A pr is the URL of a merge or pull request,
@@ -128,9 +128,18 @@ sees them until the review is submitted on the host. prr post refuses to run
 when the request has moved since the review, as the lines would no longer
 match: run prr review again first.
 
-	prr rm pr...
+	prr rm [-forget] pr...
 
-removes the worktrees; the clones stay for the next time.
+removes the worktrees; the clones stay for the next time. review still
+lists a removed worktree, as unavailable, and keeps its snapshots and
+threads, so that a later prr review of the same request shows only what
+changed. With -forget prr rm also deletes the repository of the worktree
+from the review database, with its snapshots, threads and comments: for a
+request that is done. review has no command for that, so prr writes the
+database (review.db in the config directory) with sqlite3, and only one of
+the schema it knows. It refuses while the review holds remarks prr post has
+yet to send; it asks review in the worktree, so use -forget together with
+the removal rather than after it.
 
 # The skill
 

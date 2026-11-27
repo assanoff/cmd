@@ -22,7 +22,7 @@ const usageText = `usage:
 	prr review [-n] pr...           hand the requests to review, with their discussions
 	prr wait [pr]                   wait until a thread of the review calls the agent
 	prr post [-y] [pr]              send the remarks to the host as a draft review
-	prr rm pr...                    remove the worktrees of the requests
+	prr rm [-forget] pr...          remove the worktrees of the requests
 	prr skill [-install]            print the skill for agents, or install it for Claude Code
 
 A pr is the URL of a GitLab merge request or a GitHub pull request, or its
@@ -69,8 +69,9 @@ func main() {
 		_ = f.Parse(args)
 		err = cmdPost(ctx, f.Arg(0), *yes)
 	case "rm":
+		forgetReview := f.Bool("forget", false, "also delete the reviews from the review database")
 		_ = f.Parse(args)
-		err = cmdRm(ctx, f.Args())
+		err = cmdRm(ctx, f.Args(), *forgetReview)
 	case "skill":
 		install := f.Bool("install", false, "install it into ~/.claude/skills/prr")
 		_ = f.Parse(args)

@@ -89,4 +89,10 @@ and tell the user to look at their comments against the new snapshot.
 
 ## Cleaning up
 
-    prr rm URL...     # removes the worktree; the clone stays
+    prr rm URL...           # removes the worktree; the clone stays
+    prr rm -forget URL...   # also drops the review from the review UI
+
+Without `-forget` the review UI keeps listing the request as unavailable,
+with its threads, so that a later `prr review` shows only what changed.
+`-forget` deletes that history for good: use it only when the user says
+the request is done, and it refuses while remarks are not posted yet.

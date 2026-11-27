@@ -203,11 +203,26 @@ func cmdReview(ctx context.Context, refs []string, noOpen bool) error {
 	return nil
 }
 
-func cmdRm(ctx context.Context, refs []string) error {
+// cmdRm removes the worktrees of the requests and, with forgetReview, what
+// the review database keeps of them. It refuses to forget a review whose
+// remarks prr post has yet to send.
+func cmdRm(ctx context.Context, refs []string, forgetReview bool) error {
+	var db string
+	if forgetReview {
+		var err error
+		if db, err = reviewDB(); err != nil {
+			return err
+		}
+	}
 	for _, ref := range refs {
 		p, err := parseRef(ctx, ref)
 		if err != nil {
 			return err
+		}
+		if forgetReview {
+			if err := checkPosted(ctx, p); err != nil {
+				return err
+			}
 		}
 		dir := p.gitDir()
 		if _, err := os.Stat(p.worktree()); err == nil {
@@ -221,6 +236,32 @@ func cmdRm(ctx context.Context, refs []string) error {
 			}
 		}
 		fmt.Printf("removed %s\n", p.worktree())
+		if forgetReview {
+			found, err := forget(ctx, db, p.worktree())
+			if err != nil {
+				return err
+			}
+			if found {
+				fmt.Printf("forgot %s in review\n", p.worktree())
+			}
+		}
+	}
+	return nil
+}
+
+// checkPosted fails if the review of p holds remarks prr post has yet to
+// send. Without the worktree there is nothing to ask review, so it passes.
+func checkPosted(ctx context.Context, p *PR) error {
+	if _, err := os.Stat(p.worktree()); err != nil {
+		return nil
+	}
+	notes, err := unposted(ctx, p.worktree())
+	if err != nil {
+		return err
+	}
+	if len(notes) > 0 {
+		return fmt.Errorf("%s: %d threads hold remarks not posted yet: "+
+			"prr post them, or resolve them in review, before -forget", p.Ref(), len(notes))
 	}
 	return nil
 }
